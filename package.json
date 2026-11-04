@@ -2,6 +2,10 @@
   "name": "zpos",
   "version": "1.1.0",
   "description": "zPos — Kasir & Manajemen Ritel offline-first dengan server lokal",
+  "author": {
+    "name": "AhmadFahriPratama"
+  },
+  "license": "MIT",
   "private": true,
   "main": "electron/main.js",
   "scripts": {

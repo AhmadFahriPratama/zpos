@@ -15,6 +15,10 @@ files:
 
 asar: true
 
+# Server berjalan sebagai Node murni (ELECTRON_RUN_AS_NODE) —
+# modul native (@parcel/watcher, engine Prisma) tidak perlu di-rebuild ke ABI Electron.
+npmRebuild: false
+
 extraResources:
   - { from: .next/standalone, to: app }
   - { from: .next/static, to: app/.next/static }
