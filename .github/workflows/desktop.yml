@@ -37,7 +37,7 @@ jobs:
         run: npx next build
 
       - name: Package Windows installer (.exe)
-        run: npx electron-builder --win nsis --config electron-builder.yml
+        run: npx electron-builder --win nsis --config electron-builder.yml --publish never
         env:
           ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.electron-builder-cache
 
