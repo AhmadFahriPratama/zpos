@@ -14,9 +14,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "zPos — Aplikasi Kasir Multi-Platform",
+  title: "zPos — Aplikasi Kasir Modern",
   description:
-    "Prototipe MVP zPos: aplikasi kasir (POS) offline-first dengan server lokal. Kasir, produk, stok, laporan, shift, dan monitoring perangkat dalam satu aplikasi desktop.",
+    "Aplikasi kasir (POS) offline-first dengan server lokal: kasir, produk, stok, transaksi, shift, laporan, dan monitoring perangkat dalam satu aplikasi desktop yang elegan.",
   keywords: ["zPos", "POS", "aplikasi kasir", "kasir", "point of sale"],
 };
 

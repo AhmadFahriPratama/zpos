@@ -29,6 +29,16 @@ export function tanggalPendek(iso: string | Date): string {
   return d.toLocaleDateString('id-ID', { weekday: 'short', day: '2-digit', month: 'short' })
 }
 
+/** Durasi ringkas: "2 j 15 m" */
+export function durasi(iso: string | Date): string {
+  const ms = Date.now() - (typeof iso === 'string' ? new Date(iso) : iso).getTime()
+  const h = Math.floor(ms / 3600000)
+  const m = Math.floor((ms % 3600000) / 60000)
+  if (h <= 0 && m <= 0) return 'baru saja'
+  if (h <= 0) return `${m} mnt`
+  return `${h} j ${m} mnt`
+}
+
 export function methodLabel(m: string): string {
   switch (m) {
     case 'cash': return 'Tunai'
@@ -37,4 +47,8 @@ export function methodLabel(m: string): string {
     case 'card': return 'Kartu Debit'
     default: return m
   }
+}
+
+export function orderTypeLabel(t: string): string {
+  return t === 'dinein' ? 'Makan di Tempat' : 'Bawa Pulang'
 }

@@ -24,6 +24,7 @@ model Product {
   unit       String      @default("pcs")
   price      Float       @default(0)
   cost       Float       @default(0)
+  image      String?
   stock      Int         @default(0)
   minStock   Int         @default(5)
   isActive   Boolean     @default(true)
@@ -35,34 +36,57 @@ model Product {
   updatedAt  DateTime    @updatedAt
 }
 
+model Setting {
+  id            String   @id @default("main")
+  storeName     String   @default("Kopi Nusantara")
+  storeAddress  String   @default("Jl. Merdeka No. 88, Bandung")
+  storePhone    String   @default("0812-3456-7890")
+  taxEnabled    Boolean  @default(true)
+  taxRate       Float    @default(11)
+  receiptFooter String   @default("Terima kasih telah berbelanja!")
+  paperWidth    String   @default("80")
+  managerPinHash String  @default("")
+  updatedAt     DateTime @updatedAt
+}
+
 model Shift {
-  id          String    @id @default(cuid())
-  cashierName String
-  openingCash Float     @default(0)
-  closingCash Float?
+  id           String    @id @default(cuid())
+  cashierName  String
+  openingCash  Float     @default(0)
+  closingCash  Float?
   expectedCash Float?
-  diff        Float?
-  status      String    @default("open")
-  openedAt    DateTime  @default(now())
-  closedAt    DateTime?
-  sales       Sale[]
+  diff         Float?
+  cashSales    Float?
+  nonCashSales Float?
+  totalSales   Float?
+  trxCount     Int?
+  status       String    @default("open")
+  openedAt     DateTime  @default(now())
+  closedAt     DateTime?
+  sales        Sale[]
 }
 
 model Sale {
-  id           String     @id @default(cuid())
-  invoiceNo    String     @unique
-  status       String     @default("paid")
-  subtotal     Float      @default(0)
-  discount     Float      @default(0)
-  total        Float      @default(0)
-  paidAmount   Float      @default(0)
-  changeAmount Float      @default(0)
-  method       String     @default("cash")
-  cashierName  String     @default("Kasir")
-  shiftId      String?
-  shift        Shift?     @relation(fields: [shiftId], references: [id], onDelete: SetNull)
-  items        SaleItem[]
-  createdAt    DateTime   @default(now())
+  id            String     @id @default(cuid())
+  invoiceNo     String     @unique
+  status        String     @default("paid")
+  subtotal      Float      @default(0)
+  discount      Float      @default(0)
+  orderDiscount Float      @default(0)
+  tax           Float      @default(0)
+  total         Float      @default(0)
+  paidAmount    Float      @default(0)
+  changeAmount  Float      @default(0)
+  method        String     @default("cash")
+  orderType     String     @default("takeaway")
+  note          String?
+  cashierName   String     @default("Kasir")
+  shiftId       String?
+  shift         Shift?     @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  voidReason    String?
+  voidedAt      DateTime?
+  items         SaleItem[]
+  createdAt     DateTime   @default(now())
 }
 
 model SaleItem {

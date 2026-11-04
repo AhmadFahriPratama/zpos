@@ -6,7 +6,6 @@ export const dynamic = 'force-dynamic'
 interface ItemInput {
   productId: string
   qty: number
-  price?: number
   discount?: number
 }
 
@@ -16,33 +15,38 @@ interface SaleBody {
   paidAmount?: number
   cashierName?: string
   shiftId?: string | null
+  orderType?: string
+  note?: string
+  orderDiscount?: number
   offset?: number
 }
 
 const VALID_METHODS = ['cash', 'qris', 'transfer', 'card']
-
-/** Batas tengah malam waktu lokal (dari offset menit getTimezoneOffset client/server) */
-function startOfLocalDay(offsetMin: number, d = new Date()): Date {
-  const localMs = d.getTime() - offsetMin * 60000
-  const dayIdx = Math.floor(localMs / 86400000)
-  return new Date(dayIdx * 86400000 + offsetMin * 60000)
-}
+const VALID_ORDER_TYPES = ['dinein', 'takeaway']
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
     const days = Math.min(90, Math.max(1, Number(searchParams.get('days')) || 30))
     const limit = Math.min(500, Math.max(1, Number(searchParams.get('limit')) || 200))
-    const offset = Number(searchParams.get('offset')) || 0
+    const shiftId = searchParams.get('shiftId') || undefined
+    const method = searchParams.get('method') || undefined
+    const status = searchParams.get('status') || undefined
+    const q = (searchParams.get('q') || '').trim()
 
     const since = new Date(Date.now() - days * 86400000)
     const sales = await db.sale.findMany({
-      where: { createdAt: { gte: since } },
+      where: {
+        createdAt: { gte: since },
+        ...(shiftId ? { shiftId } : {}),
+        ...(method && method !== 'all' ? { method } : {}),
+        ...(status && status !== 'all' ? { status } : {}),
+        ...(q ? { OR: [{ invoiceNo: { contains: q } }, { cashierName: { contains: q } }] } : {}),
+      },
       include: { items: true },
       orderBy: { createdAt: 'desc' },
       take: limit,
     })
-    void offset
     return NextResponse.json(sales)
   } catch (e) {
     return NextResponse.json(
@@ -57,7 +61,9 @@ export async function POST(req: Request) {
     const body = (await req.json()) as SaleBody
     const offset = Number(body.offset) || 0
     const method = VALID_METHODS.includes(body.method) ? body.method : 'cash'
+    const orderType = VALID_ORDER_TYPES.includes(body.orderType ?? '') ? body.orderType! : 'takeaway'
     const cashierName = (body.cashierName || 'Kasir').slice(0, 40)
+    const note = (body.note || '').trim().slice(0, 200) || null
 
     if (!Array.isArray(body.items) || body.items.length === 0)
       return NextResponse.json({ error: 'Keranjang kosong' }, { status: 400 })
@@ -87,8 +93,19 @@ export async function POST(req: Request) {
     }
 
     const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0)
-    const discount = lines.reduce((s, l) => s + l.discount, 0)
-    const total = subtotal - discount
+    const itemDiscount = lines.reduce((s, l) => s + l.discount, 0)
+
+    // Diskon level transaksi (maks. sisa setelah diskon item)
+    const afterItems = subtotal - itemDiscount
+    const orderDiscount = Math.max(0, Math.min(Number(body.orderDiscount) || 0, afterItems))
+
+    // Pajak dari pengaturan toko (PPN/PB1)
+    const setting = await db.setting.findUnique({ where: { id: 'main' } })
+    const taxEnabled = setting?.taxEnabled ?? false
+    const taxRate = setting?.taxRate ?? 0
+    const taxable = subtotal - itemDiscount - orderDiscount
+    const tax = taxEnabled && taxRate > 0 ? Math.round(taxable * (taxRate / 100)) : 0
+    const total = taxable + tax
 
     let paidAmount = total
     let changeAmount = 0
@@ -106,18 +123,26 @@ export async function POST(req: Request) {
       if (shift && shift.status === 'open') shiftId = shift.id
     }
 
-    // Nomor invoice berurutan harian
-    const startDay = startOfLocalDay(offset)
-    const countToday = await db.sale.count({ where: { createdAt: { gte: startDay } } })
+    // Nomor invoice berurutan harian — ambil max sequence yang ada (tahan gap & collision)
     const ymd = new Date(Date.now() - offset * 60000)
       .toISOString().slice(0, 10).replace(/-/g, '')
-    const invoiceNo = `INV-${ymd}-${String(countToday + 1).padStart(4, '0')}`
+    const prefix = `INV-${ymd}-`
+    const todays = await db.sale.findMany({
+      where: { invoiceNo: { startsWith: prefix } },
+      select: { invoiceNo: true },
+    })
+    let maxSeq = 0
+    for (const t of todays) {
+      const n = Number(t.invoiceNo.slice(prefix.length))
+      if (Number.isFinite(n) && n > maxSeq) maxSeq = n
+    }
+    const invoiceNo = `${prefix}${String(maxSeq + 1).padStart(4, '0')}`
 
     const sale = await db.$transaction(async (tx) => {
       const created = await tx.sale.create({
         data: {
-          invoiceNo, status: 'paid', subtotal, discount, total,
-          paidAmount, changeAmount, method, cashierName, shiftId,
+          invoiceNo, status: 'paid', subtotal, discount: itemDiscount, orderDiscount, tax, total,
+          paidAmount, changeAmount, method, orderType, note, cashierName, shiftId,
           items: {
             create: lines.map((l) => ({
               productId: l.productId, name: l.name, qty: l.qty,
@@ -145,8 +170,11 @@ export async function POST(req: Request) {
 
     return NextResponse.json(sale, { status: 201 })
   } catch (e) {
+    if (process.env.NODE_ENV !== 'production') {
+      console.error('[sales POST]', e)
+    }
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Transaksi gagal' },
+      { error: 'Transaksi gagal diproses — periksa kembali keranjang lalu coba lagi.' },
       { status: 500 }
     )
   }

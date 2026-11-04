@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
-    const [products, categories, openShift, devices] = await Promise.all([
+    const [products, categories, openShift, devices, setting] = await Promise.all([
       db.product.findMany({
         include: { category: { select: { id: true, name: true } } },
         orderBy: { name: 'asc' },
@@ -13,15 +13,23 @@ export async function GET() {
       db.category.findMany({ orderBy: { sortOrder: 'asc' } }),
       db.shift.findFirst({ where: { status: 'open' }, orderBy: { openedAt: 'desc' } }),
       db.device.findMany({ orderBy: { name: 'asc' } }),
+      db.setting.findUnique({ where: { id: 'main' } }),
     ])
 
     const startedAt = new Date(Date.now() - Math.round(process.uptime() * 1000)).toISOString()
+
+    const { managerPinHash: _omit, ...safeSetting } = setting ?? {
+      id: 'main', storeName: 'Kopi Nusantara', storeAddress: '', storePhone: '',
+      taxEnabled: false, taxRate: 0, receiptFooter: '', paperWidth: '80', updatedAt: new Date(),
+    }
+    void _omit
 
     return NextResponse.json({
       products,
       categories,
       currentShift: openShift,
       devices,
+      settings: safeSetting,
       serverInfo: {
         name: 'zPos Server',
         address: 'zpos.local:7788',
@@ -38,3 +46,5 @@ export async function GET() {
     )
   }
 }
+
+// touch: reload graph

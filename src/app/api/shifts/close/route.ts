@@ -15,12 +15,17 @@ export async function POST(req: Request) {
 
     const sales = await db.sale.findMany({ where: { shiftId: shift.id, status: 'paid' } })
     const cashSum = sales.filter((s) => s.method === 'cash').reduce((a, b) => a + b.total, 0)
+    const nonCashSum = sales.filter((s) => s.method !== 'cash').reduce((a, b) => a + b.total, 0)
     const expectedCash = shift.openingCash + cashSum
     const diff = countedCash - expectedCash
 
     const updated = await db.shift.update({
       where: { id: shift.id },
-      data: { status: 'closed', closedAt: new Date(), expectedCash, closingCash: countedCash, diff },
+      data: {
+        status: 'closed', closedAt: new Date(), expectedCash, closingCash: countedCash, diff,
+        cashSales: cashSum, nonCashSales: nonCashSum,
+        totalSales: cashSum + nonCashSum, trxCount: sales.length,
+      },
     })
     return NextResponse.json(updated)
   } catch (e) {

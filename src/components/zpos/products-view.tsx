@@ -9,7 +9,6 @@ import type { Product } from '@/lib/zpos-types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -23,9 +22,9 @@ import {
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { ViewHeader, EmptyState } from './ui-bits'
+import { ViewHeader, EmptyState, ProductThumb } from './ui-bits'
 import {
-  ArrowUpDown, MoreHorizontal, Package, PackagePlus, Pencil, Power, Search, Trash2,
+  ArrowUpDown, ImagePlus, MoreHorizontal, Package, PackagePlus, Pencil, Power, Search, Trash2,
 } from 'lucide-react'
 
 interface FormState {
@@ -36,6 +35,7 @@ interface FormState {
   unit: string
   price: string
   cost: string
+  image: string
   stock: string
   minStock: string
   categoryId: string
@@ -43,14 +43,14 @@ interface FormState {
 
 const EMPTY_FORM: FormState = {
   name: '', sku: '', barcode: '', unit: 'pcs',
-  price: '', cost: '', stock: '0', minStock: '5', categoryId: 'none',
+  price: '', cost: '', image: '', stock: '0', minStock: '5', categoryId: 'none',
 }
 
 function productToForm(p: Product): FormState {
   return {
     id: p.id, name: p.name, sku: p.sku, barcode: p.barcode ?? '', unit: p.unit,
-    price: String(p.price), cost: String(p.cost), stock: String(p.stock),
-    minStock: String(p.minStock), categoryId: p.categoryId ?? 'none',
+    price: String(p.price), cost: String(p.cost), image: p.image ?? '',
+    stock: String(p.stock), minStock: String(p.minStock), categoryId: p.categoryId ?? 'none',
   }
 }
 
@@ -61,6 +61,7 @@ export function ProductsView() {
   const deleteProduct = useZPos((s) => s.deleteProduct)
 
   const [search, setSearch] = useState('')
+  const [catFilter, setCatFilter] = useState('all')
   const [form, setForm] = useState<FormState | null>(null)
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<Product | null>(null)
@@ -70,15 +71,16 @@ export function ProductsView() {
     const q = search.trim().toLowerCase()
     const list = products.filter(
       (p) =>
-        !q ||
-        p.name.toLowerCase().includes(q) ||
-        p.sku.toLowerCase().includes(q) ||
-        (p.barcode ?? '').includes(q)
+        (catFilter === 'all' || p.categoryId === catFilter) &&
+        (!q ||
+          p.name.toLowerCase().includes(q) ||
+          p.sku.toLowerCase().includes(q) ||
+          (p.barcode ?? '').includes(q))
     )
     return [...list].sort((a, b) =>
       sortAsc ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
     )
-  }, [products, search, sortAsc])
+  }, [products, search, catFilter, sortAsc])
 
   const submit = async () => {
     if (!form) return
@@ -99,6 +101,7 @@ export function ProductsView() {
       unit: form.unit,
       price: Number(form.price),
       cost: Number(form.cost) || 0,
+      image: form.image.trim() || null,
       stock: Number(form.stock) || 0,
       minStock: Number(form.minStock) || 0,
       categoryId: form.categoryId === 'none' ? null : form.categoryId,
@@ -113,17 +116,17 @@ export function ProductsView() {
   }
 
   return (
-    <div>
-      <ViewHeader title="Manajemen Produk" desc="Kelola katalog, harga, dan stok minimum.">
+    <div className="mx-auto max-w-[1400px] p-4 sm:p-5">
+      <ViewHeader title="Manajemen Produk" desc="Kelola katalog, foto, harga, dan stok minimum.">
         <Button
-          className="bg-zinc-900 text-white hover:bg-zinc-800"
+          className="h-9 bg-zinc-900 font-bold text-white hover:bg-zinc-700"
           onClick={() => setForm({ ...EMPTY_FORM })}
         >
-          <PackagePlus className="mr-2 h-4 w-4" aria-hidden="true" /> Tambah Produk
+          <PackagePlus className="mr-1.5 h-4 w-4" aria-hidden="true" /> Tambah Produk
         </Button>
       </ViewHeader>
 
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="relative flex-1 sm:max-w-xs">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" aria-hidden="true" />
           <Input
@@ -133,6 +136,17 @@ export function ProductsView() {
             className="h-9 bg-white pl-9 text-sm"
           />
         </div>
+        <Select value={catFilter} onValueChange={setCatFilter}>
+          <SelectTrigger className="h-9 w-[150px] bg-white text-xs font-semibold">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Kategori</SelectItem>
+            {categories.map((c) => (
+              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Button
           variant="outline"
           size="sm"
@@ -142,6 +156,7 @@ export function ProductsView() {
           <ArrowUpDown className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
           {sortAsc ? 'A → Z' : 'Z → A'}
         </Button>
+        <span className="ml-auto text-xs font-semibold text-zinc-400">{filtered.length} produk</span>
       </div>
 
       {filtered.length === 0 ? (
@@ -167,11 +182,16 @@ export function ProductsView() {
                 const low = p.stock <= p.minStock
                 return (
                   <TableRow key={p.id} className={cn(!p.isActive && 'opacity-50')}>
-                    <TableCell className="max-w-[220px] pl-4">
-                      <p className="truncate text-sm font-semibold text-zinc-900">{p.name}</p>
-                      <p className="truncate font-mono text-[11px] text-zinc-400">
-                        {p.sku}{p.barcode ? ` · ${p.barcode}` : ''}
-                      </p>
+                    <TableCell className="max-w-[260px] pl-4">
+                      <div className="flex items-center gap-2.5">
+                        <ProductThumb src={p.image} name={p.name} className="h-9 w-9 shrink-0 rounded-lg border border-zinc-100" />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-zinc-900">{p.name}</p>
+                          <p className="truncate font-mono text-[11px] text-zinc-400">
+                            {p.sku}{p.barcode ? ` · ${p.barcode}` : ''}
+                          </p>
+                        </div>
+                      </div>
                     </TableCell>
                     <TableCell>
                       <span className="text-xs text-zinc-600">{p.category?.name ?? '—'}</span>
@@ -183,10 +203,9 @@ export function ProductsView() {
                       {rupiah(p.cost)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Badge
-                        variant="secondary"
+                      <span
                         className={cn(
-                          'font-mono tabular-nums',
+                          'inline-block rounded-full px-2 py-0.5 font-mono text-xs font-bold tabular-nums',
                           p.stock <= 0
                             ? 'bg-rose-100 text-rose-700'
                             : low
@@ -195,7 +214,7 @@ export function ProductsView() {
                         )}
                       >
                         {angka(p.stock)} {p.unit}
-                      </Badge>
+                      </span>
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       <span
@@ -247,14 +266,35 @@ export function ProductsView() {
           <DialogHeader>
             <DialogTitle>{form?.id ? 'Edit Produk' : 'Tambah Produk Baru'}</DialogTitle>
             <DialogDescription>
-              Harga &amp; stok yang konsisten menjaga akurasi laporan laba.
+              Foto produk mempercepat kasir mengenali item tanpa membaca nama.
             </DialogDescription>
           </DialogHeader>
           {form && (
             <div className="grid gap-3.5 sm:grid-cols-2">
+              <div className="flex gap-3 sm:col-span-2">
+                <div className="shrink-0">
+                  <p className="mb-1 text-xs font-medium text-zinc-500">Pratinjau</p>
+                  <ProductThumb src={form.image} name={form.name || '?'} className="h-20 w-20 rounded-xl border border-zinc-200" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <Label htmlFor="f-image" className="flex items-center gap-1">
+                    <ImagePlus className="h-3.5 w-3.5" aria-hidden="true" /> URL Foto
+                  </Label>
+                  <Input
+                    id="f-image"
+                    value={form.image}
+                    onChange={(e) => setForm({ ...form, image: e.target.value })}
+                    className="mt-1 font-mono text-xs"
+                    placeholder="/products/espresso.png"
+                  />
+                  <p className="mt-1 text-[11px] text-zinc-400">
+                    Kosongkan untuk menampilkan inisial otomatis.
+                  </p>
+                </div>
+              </div>
               <div className="sm:col-span-2">
                 <Label htmlFor="f-nama">Nama produk *</Label>
-                <Input id="f-nama" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1" placeholder="mis. Indomie Goreng" />
+                <Input id="f-nama" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1" placeholder="mis. Kopi Susu Gula Aren" />
               </div>
               <div>
                 <Label htmlFor="f-sku">SKU</Label>
@@ -278,7 +318,7 @@ export function ProductsView() {
               </div>
               <div>
                 <Label htmlFor="f-unit">Satuan</Label>
-                <Input id="f-unit" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} className="mt-1" placeholder="pcs / btl / kg" />
+                <Input id="f-unit" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} className="mt-1" placeholder="pcs / cup / porsi" />
               </div>
               <div>
                 <Label htmlFor="f-harga">Harga jual (Rp) *</Label>
@@ -300,7 +340,7 @@ export function ProductsView() {
           )}
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setForm(null)}>Batal</Button>
-            <Button className="bg-zinc-900 text-white hover:bg-zinc-800" disabled={saving} onClick={() => void submit()}>
+            <Button className="bg-zinc-900 font-bold text-white hover:bg-zinc-700" disabled={saving} onClick={() => void submit()}>
               {saving ? 'Menyimpan…' : 'Simpan Produk'}
             </Button>
           </DialogFooter>

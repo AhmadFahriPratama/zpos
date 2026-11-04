@@ -5,18 +5,25 @@ export const dynamic = 'force-dynamic'
 
 const DAY_LABELS = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']
 
-/** Pecah rentang 7 hari lokal berdasarkan offset menit client */
-function localDayKeys(offsetMin: number): Array<{ key: string; startUtc: Date; endUtc: Date; label: string }> {
-  const days: Array<{ key: string; startUtc: Date; endUtc: Date; label: string }> = []
+interface DayBucket {
+  key: string; startUtc: Date; endUtc: Date; label: string; dayNum: string
+}
+
+/** Bucket hari lokal berdasarkan offset menit client */
+function localDayKeys(offsetMin: number, nDays: number): DayBucket[] {
+  const days: DayBucket[] = []
   const nowLocalMs = Date.now() - offsetMin * 60000
   const todayIdx = Math.floor(nowLocalMs / 86400000)
-  for (let i = 6; i >= 0; i--) {
+  for (let i = nDays - 1; i >= 0; i--) {
     const idx = todayIdx - i
-    const startUtc = new Date(idx * 86400000 + offsetMin * 60000)
-    const endUtc = new Date((idx + 1) * 86400000 + offsetMin * 60000)
-    const key = new Date(idx * 86400000).toISOString().slice(0, 10)
-    const dow = new Date(idx * 86400000).getUTCDay()
-    days.push({ key, startUtc, endUtc, label: DAY_LABELS[dow] })
+    const dayDate = new Date(idx * 86400000)
+    days.push({
+      key: dayDate.toISOString().slice(0, 10),
+      startUtc: new Date(idx * 86400000 + offsetMin * 60000),
+      endUtc: new Date((idx + 1) * 86400000 + offsetMin * 60000),
+      label: DAY_LABELS[dayDate.getUTCDay()],
+      dayNum: String(dayDate.getUTCDate()).padStart(2, '0'),
+    })
   }
   return days
 }
@@ -25,32 +32,42 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url)
     const offset = Number(searchParams.get('offset')) || 0
-    const days = localDayKeys(offset)
+    const nDays = Math.min(30, Math.max(1, Number(searchParams.get('range')) || 7))
+    const days = localDayKeys(offset, nDays)
     const since = days[0].startUtc
 
-    const sales = await db.sale.findMany({
-      where: { status: 'paid', createdAt: { gte: since } },
-      include: { items: true },
-    })
+    const [sales, products] = await Promise.all([
+      db.sale.findMany({
+        where: { status: 'paid', createdAt: { gte: since } },
+        include: { items: true },
+      }),
+      db.product.findMany({ where: { isActive: true } }),
+    ])
 
     // Ringkasan hari ini
     const today = days[days.length - 1]
-    const todaySales = sales.filter((s) => s.createdAt >= today.startUtc && s.createdAt < today.endUtc)
+    const yesterday = days.length >= 2 ? days[days.length - 2] : null
+    const inDay = (s: { createdAt: Date }, d: DayBucket | null) =>
+      d !== null && s.createdAt >= d.startUtc && s.createdAt < d.endUtc
+
+    const todaySales = sales.filter((s) => inDay(s, today))
+    const yesterdaySales = yesterday ? sales.filter((s) => inDay(s, yesterday)) : []
     const todayRevenue = todaySales.reduce((a, b) => a + b.total, 0)
+    const yesterdayRevenue = yesterdaySales.reduce((a, b) => a + b.total, 0)
     const todayCount = todaySales.length
     const todayItems = todaySales.reduce((a, s) => a + s.items.reduce((x, i) => x + i.qty, 0), 0)
 
-    // Seri 7 hari
+    // Seri harian
     const series = days.map((d) => {
-      const inDay = sales.filter((s) => s.createdAt >= d.startUtc && s.createdAt < d.endUtc)
+      const ds = sales.filter((s) => s.createdAt >= d.startUtc && s.createdAt < d.endUtc)
       return {
-        date: d.key, label: d.label,
-        revenue: inDay.reduce((a, b) => a + b.total, 0),
-        count: inDay.length,
+        date: d.key, label: d.label, dayNum: d.dayNum,
+        revenue: ds.reduce((a, b) => a + b.total, 0),
+        count: ds.length,
       }
     })
 
-    // Produk terlaris (7 hari)
+    // Produk terlaris
     const perProduct = new Map<string, { name: string; qty: number; revenue: number }>()
     for (const s of sales) {
       for (const it of s.items) {
@@ -66,7 +83,7 @@ export async function GET(req: Request) {
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 5)
 
-    // Metode pembayaran (7 hari)
+    // Metode pembayaran
     const perMethod = new Map<string, { count: number; total: number }>()
     for (const s of sales) {
       const cur = perMethod.get(s.method) ?? { count: 0, total: 0 }
@@ -76,10 +93,24 @@ export async function GET(req: Request) {
     }
     const methodBreakdown = [...perMethod.entries()].map(([method, v]) => ({ method, ...v }))
 
+    // Stok menipis & transaksi terakhir
+    const lowStock = products
+      .filter((p) => p.stock <= p.minStock)
+      .sort((a, b) => a.stock - b.stock)
+      .slice(0, 6)
+      .map((p) => ({ id: p.id, name: p.name, stock: p.stock, unit: p.unit, minStock: p.minStock }))
+    const recent = await db.sale.findMany({
+      where: { status: 'paid' },
+      include: { items: true },
+      orderBy: { createdAt: 'desc' },
+      take: 6,
+    })
+
     return NextResponse.json({
-      todayRevenue, todayCount, todayItems,
+      range: nDays,
+      todayRevenue, yesterdayRevenue, todayCount, todayItems,
       avgTicket: todayCount > 0 ? Math.round(todayRevenue / todayCount) : 0,
-      series, topProducts, methodBreakdown,
+      series, topProducts, methodBreakdown, lowStock, recent,
     })
   } catch (e) {
     return NextResponse.json(

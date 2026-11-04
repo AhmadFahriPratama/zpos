@@ -11,6 +11,7 @@ export interface Product {
   unit: string
   price: number
   cost: number
+  image: string | null
   stock: number
   minStock: number
   isActive: boolean
@@ -26,6 +27,16 @@ export interface CartItem {
   discount: number
   stock: number
   unit: string
+  image: string | null
+}
+
+export interface HeldOrder {
+  id: string
+  createdAt: string
+  items: CartItem[]
+  orderType: 'dinein' | 'takeaway'
+  note: string
+  orderDiscount: number
 }
 
 export interface SaleItem {
@@ -44,12 +55,18 @@ export interface Sale {
   status: string
   subtotal: number
   discount: number
+  orderDiscount: number
+  tax: number
   total: number
   paidAmount: number
   changeAmount: number
   method: string
+  orderType: string
+  note: string | null
   cashierName: string
   shiftId: string | null
+  voidReason: string | null
+  voidedAt: string | null
   createdAt: string
   items: SaleItem[]
 }
@@ -61,12 +78,28 @@ export interface Shift {
   closingCash: number | null
   expectedCash: number | null
   diff: number | null
+  cashSales: number | null
+  nonCashSales: number | null
+  totalSales: number | null
+  trxCount: number | null
   status: string
   openedAt: string
   closedAt: string | null
   salesCount?: number
   salesTotal?: number
   cashTotal?: number
+}
+
+export interface Settings {
+  id: string
+  storeName: string
+  storeAddress: string
+  storePhone: string
+  taxEnabled: boolean
+  taxRate: number
+  receiptFooter: string
+  paperWidth: string
+  updatedAt: string
 }
 
 export interface Device {
@@ -92,13 +125,17 @@ export interface StockMove {
 }
 
 export interface Stats {
+  range: number
   todayRevenue: number
+  yesterdayRevenue: number
   todayCount: number
   todayItems: number
   avgTicket: number
-  series: Array<{ date: string; label: string; revenue: number; count: number }>
+  series: Array<{ date: string; label: string; dayNum: string; revenue: number; count: number }>
   topProducts: Array<{ productId: string; name: string; qty: number; revenue: number }>
   methodBreakdown: Array<{ method: string; count: number; total: number }>
+  lowStock: Array<{ id: string; name: string; stock: number; unit: string; minStock: number }>
+  recent: Sale[]
 }
 
 export interface Bootstrap {
@@ -106,6 +143,7 @@ export interface Bootstrap {
   categories: Category[]
   currentShift: Shift | null
   devices: Device[]
+  settings: Settings | null
   serverInfo: {
     name: string
     address: string
@@ -114,4 +152,12 @@ export interface Bootstrap {
     dbSizeKb: number
     startedAt: string
   }
+}
+
+export interface Totals {
+  subtotal: number
+  itemDiscount: number
+  orderDiscount: number
+  tax: number
+  total: number
 }
