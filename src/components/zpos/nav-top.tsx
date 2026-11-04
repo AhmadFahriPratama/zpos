@@ -5,7 +5,7 @@ import { useZPos, type View } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import {
   Activity, BarChart3, Boxes, ChevronDown, ClipboardList, Clock, LayoutDashboard, Package,
-  ReceiptText, Settings, ShoppingCart, Store, Tags, UsersRound, UserCog, UserRound,
+  ReceiptText, Settings, ShoppingCart, Store, Tags, UsersRound, UserCog, UserRound, Wallet,
 } from 'lucide-react'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -21,6 +21,7 @@ const NAV: Array<{ id: View; label: string; icon: typeof ShoppingCart; labelAt?:
   { id: 'pembelian', label: 'Pembelian', icon: ClipboardList },
   { id: 'pelanggan', label: 'Pelanggan', icon: UsersRound },
   { id: 'karyawan', label: 'Karyawan', icon: UserCog },
+  { id: 'keuangan', label: 'Keuangan', icon: Wallet, labelAt: 'md' },
   { id: 'promo', label: 'Promo', icon: Tags },
   { id: 'transaksi', label: 'Transaksi', icon: ReceiptText, labelAt: 'md' },
   { id: 'shift', label: 'Shift', icon: Clock, labelAt: 'md' },

@@ -14,7 +14,7 @@ import { StatCard, MethodChip, ViewHeader, EmptyState } from './ui-bits'
 import { RevenueBars, ProfitBars, DonutMethod, TopProductList } from './charts'
 import {
   Banknote, BarChart3, Coins, Crown, FileDown, Loader2, ReceiptText, Calculator,
-  Star, Tag, TrendingUp, UserCog, UsersRound,
+  Star, Tag, TrendingDown, TrendingUp, UserCog, UsersRound, Wallet,
 } from 'lucide-react'
 
 type Range = '7' | '30'
@@ -31,6 +31,7 @@ const TABS: Array<{ id: Tab; label: string }> = [
 export function ReportsView() {
   const booted = useZPos((s) => s.booted)
   const currentShift = useZPos((s) => s.currentShift)
+  const cashEntries = useZPos((s) => s.cashEntries)
   const memberCount = useZPos((s) => s.customers.length)
   const goldCount = useZPos((s) => s.customers.filter((c) => c.tier === 'gold').length)
   const totalPoints = useZPos((s) => s.customers.reduce((a, c) => a + c.points, 0))
@@ -62,6 +63,13 @@ export function ReportsView() {
   const days = Number(range)
   const rangeProfit = stats?.rangeProfit ?? 0
   const margin = rangeRevenue > 0 ? Math.round((rangeProfit / rangeRevenue) * 100) : 0
+
+  // Beban operasional dari modul Keuangan (pengeluaran non-penjualan) dalam rentang
+  const rangeExpense = cashEntries
+    .filter((c) => c.type === 'expense' && Date.now() - new Date(c.createdAt).getTime() <= days * 86400000)
+    .reduce((a, c) => a + c.amount, 0)
+  const netProfit = rangeProfit - rangeExpense
+  const netMargin = rangeRevenue > 0 ? Math.round((netProfit / rangeRevenue) * 100) : 0
 
   const exportCsv = () => {
     if (!sales || sales.length === 0) return
@@ -234,10 +242,16 @@ export function ReportsView() {
           {tab === 'laba' && (
             <>
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <StatCard label={`Laba Kotor ${days} Hari`} value={rupiah(rangeProfit)} icon={TrendingUp} tone="emerald" />
-                <StatCard label="Margin Kotor" value={`${margin}%`} sub="laba ÷ omzet" icon={Calculator} />
-                <StatCard label="Laba Hari Ini" value={rupiah(stats.todayProfit)} icon={Banknote} />
-                <StatCard label={`Omzet ${days} Hari`} value={rupiah(rangeRevenue)} icon={ReceiptText} />
+                <StatCard label={`Laba Kotor ${days} Hari`} value={rupiah(rangeProfit)} icon={TrendingUp} tone="emerald" sub={`margin kotor ${margin}%`} />
+                <StatCard label="Beban Operasional" value={rupiah(rangeExpense)} icon={TrendingDown} tone="rose" sub={`dari modul Keuangan`} />
+                <StatCard
+                  label={`Laba Bersih ${days} Hari`}
+                  value={rupiah(netProfit)}
+                  icon={Wallet}
+                  tone={netProfit >= 0 ? 'emerald' : 'rose'}
+                  sub={`laba kotor − beban`}
+                />
+                <StatCard label="Margin Bersih" value={`${netMargin}%`} sub="laba bersih ÷ omzet" icon={Calculator} />
               </div>
 
               <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
@@ -261,8 +275,9 @@ export function ReportsView() {
                 <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm xl:col-span-3">
                   <p className="mb-4 text-sm font-bold text-zinc-900">Catatan Analisis Laba</p>
                   <ul className="space-y-2.5 text-xs leading-relaxed text-zinc-500">
-                    <li className="flex gap-2"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />Laba kotor dihitung dari harga jual dikurangi HPP (harga pokok) per item — belum termasuk biaya operasional seperti sewa & gaji.</li>
-                    <li className="flex gap-2"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />Margin sehat untuk F&B umumnya 55–70%. Margin Anda saat ini <b className="text-zinc-800">{margin}%</b>.</li>
+                    <li className="flex gap-2"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />Laba kotor dihitung dari harga jual dikurangi HPP (harga pokok) per item.</li>
+                    <li className="flex gap-2"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />Laba bersih sudah memperhitungkan beban operasional (sewa, gaji, listrik, dll.) yang dicatat lewat modul <b className="text-zinc-800">Keuangan</b> — {rupiah(rangeExpense)} dalam {days} hari terakhir.</li>
+                    <li className="flex gap-2"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />Margin sehat untuk F&B umumnya 55–70%. Margin bersih Anda saat ini <b className="text-zinc-800">{netMargin}%</b>.</li>
                     <li className="flex gap-2"><span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />Perbarui harga beli produk lewat modul <b className="text-zinc-800">Pembelian</b> agar HPP selalu akurat.</li>
                   </ul>
                 </div>

@@ -1,0 +1,38 @@
+# Konfigurasi packaging zPos Desktop (electron-builder)
+# Build lokal : npx next build && npx electron-builder --win nsis
+appId: id.zpos.desktop
+productName: zPos
+copyright: Copyright © 2026 zPos
+
+directories:
+  buildResources: build
+  output: dist
+
+# Hanya shell Electron yang masuk app.asar — server Next dipaketkan lewat extraResources
+files:
+  - electron/**/*
+  - package.json
+
+asar: true
+
+extraResources:
+  - { from: .next/standalone, to: app }
+  - { from: .next/static, to: app/.next/static }
+  - { from: public, to: app/public }
+  - { from: db/custom.db, to: db/custom.db }
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.png
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: zPos
+  artifactName: zPos-Setup-${version}-${arch}.${ext}

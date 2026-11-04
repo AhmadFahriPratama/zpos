@@ -242,6 +242,7 @@ export interface Bootstrap {
   promos: Promo[]
   employees: Employee[]
   outlets: Outlet[]
+  cashEntries: CashEntry[]
   serverInfo: {
     name: string
     address: string
@@ -251,6 +252,25 @@ export interface Bootstrap {
     startedAt: string
   }
 }
+
+export interface CashEntry {
+  id: string
+  type: 'expense' | 'income'
+  category: string
+  amount: number
+  note: string | null
+  userName: string
+  createdAt: string
+}
+
+export const EXPENSE_CATEGORIES = [
+  'Bahan Baku', 'Gaji Karyawan', 'Sewa Tempat', 'Listrik & Air',
+  'Internet', 'Marketing', 'Perawatan', 'Transport', 'Operasional', 'Lainnya',
+] as const
+
+export const INCOME_CATEGORIES = [
+  'Sewa Tempat', 'Komisi', 'Penjualan Aset', 'Pendapatan Lain',
+] as const
 
 export interface Totals {
   subtotal: number

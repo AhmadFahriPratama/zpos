@@ -4,14 +4,14 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { toast } from 'sonner'
 import type {
-  Bootstrap, CartItem, Category, Customer, Device, Employee, HeldOrder, Outlet,
+  Bootstrap, CartItem, CashEntry, Category, Customer, Device, Employee, HeldOrder, Outlet,
   Product, Promo, Purchase, Sale, Settings, Shift, StockMove, Supplier, Totals,
 } from './zpos-types'
 import { rupiah } from './format'
 
 export type View =
   | 'dashboard' | 'kasir' | 'produk' | 'stok' | 'pembelian'
-  | 'pelanggan' | 'karyawan' | 'promo' | 'outlet'
+  | 'pelanggan' | 'karyawan' | 'keuangan' | 'promo' | 'outlet'
   | 'transaksi' | 'shift' | 'laporan' | 'monitoring' | 'pengaturan'
 
 export type OrderType = 'dinein' | 'takeaway'
@@ -46,7 +46,8 @@ interface ZPosState {
   customers: Customer[]
   promos: Promo[]
   employees: Employee[]
-
+  outlets: Outlet[]
+  cashEntries: CashEntry[]
   cart: CartItem[]
   orderType: OrderType
   orderNote: string
@@ -98,6 +99,10 @@ interface ZPosState {
   deletePromo: (id: string) => Promise<boolean>
   saveOutlet: (data: Partial<Outlet> & { name: string }) => Promise<boolean>
   deleteOutlet: (id: string) => Promise<boolean>
+
+  /* ===== Keuangan: pengeluaran & pemasukan ===== */
+  addCashEntry: (data: { type: 'expense' | 'income'; category: string; amount: number; note?: string; date?: string }) => Promise<boolean>
+  deleteCashEntry: (id: string) => Promise<boolean>
 }
 
 async function jfetch<T>(url: string, init?: RequestInit): Promise<T> {
@@ -132,6 +137,8 @@ export const useZPos = create<ZPosState>()(
       customers: [],
       promos: [],
       employees: [],
+      outlets: [],
+      cashEntries: [],
 
       cart: [],
       orderType: 'takeaway',
@@ -159,6 +166,8 @@ export const useZPos = create<ZPosState>()(
             customers: data.customers ?? [],
             promos: data.promos ?? [],
             employees: data.employees ?? [],
+            outlets: data.outlets ?? [],
+            cashEntries: data.cashEntries ?? [],
             serverInfo: data.serverInfo,
             booted: true,
           })
@@ -556,6 +565,34 @@ export const useZPos = create<ZPosState>()(
           return true
         } catch (e) {
           toast.error('Gagal menghapus outlet', { description: e instanceof Error ? e.message : undefined })
+          return false
+        }
+      },
+
+      /* ===== Keuangan: pengeluaran & pemasukan ===== */
+      addCashEntry: async ({ type, category, amount, note, date }) => {
+        try {
+          await jfetch<CashEntry>('/api/cashflow', {
+            method: 'POST',
+            body: JSON.stringify({ type, category, amount, note, date, userName: get().cashier }),
+          })
+          toast.success(type === 'income' ? 'Pemasukan dicatat' : 'Pengeluaran dicatat')
+          await get().bootstrap()
+          return true
+        } catch (e) {
+          toast.error('Gagal menyimpan catatan', { description: e instanceof Error ? e.message : undefined })
+          return false
+        }
+      },
+
+      deleteCashEntry: async (id) => {
+        try {
+          await jfetch(`/api/cashflow?id=${id}`, { method: 'DELETE' })
+          toast.success('Catatan dihapus')
+          await get().bootstrap()
+          return true
+        } catch (e) {
+          toast.error('Gagal menghapus catatan', { description: e instanceof Error ? e.message : undefined })
           return false
         }
       },

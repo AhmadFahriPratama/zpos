@@ -220,3 +220,15 @@ model Promo {
   usageCount  Int       @default(0)
   createdAt   DateTime  @default(now())
 }
+
+/* ================= Keuangan: Pengeluaran & Pemasukan ================= */
+
+model CashEntry {
+  id        String   @id @default(cuid())
+  type      String   @default("expense") // expense | income
+  category  String   @default("Lainnya")
+  amount    Float    @default(0)
+  note      String?
+  userName  String   @default("Kasir")
+  createdAt DateTime @default(now())
+}

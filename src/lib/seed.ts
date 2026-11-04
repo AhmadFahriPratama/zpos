@@ -91,6 +91,24 @@ const PROMOS = [
   { code: 'SILVER20', name: 'Diskon 20% Member', type: 'percent', value: 20, minPurchase: 200000, endsInDays: -3, active: false },
 ]
 
+/* Kategori pengeluaran operasional + rentang nominal harian (demo) */
+const EXPENSE_CATEGORIES = [
+  { category: 'Bahan Baku', min: 150000, max: 400000, notes: ['Belanja bahan rutin', 'Restock bahan baku', 'Pembelian bahan harian'] },
+  { category: 'Listrik & Air', min: 25000, max: 60000, notes: ['Token listrik', 'Tagihan air'] },
+  { category: 'Internet', min: 300000, max: 350000, notes: ['Langganan internet kafe'] },
+  { category: 'Marketing', min: 50000, max: 150000, notes: ['Iklan media sosial', 'Promosi deliveri online'] },
+  { category: 'Perawatan', min: 40000, max: 200000, notes: ['Service mesin espresso', 'Perawatan AC'] },
+  { category: 'Transport', min: 20000, max: 80000, notes: ['Bensin antar barang', 'Ongkir kurir'] },
+  { category: 'Lainnya', min: 15000, max: 100000, notes: ['Keperluan operasional lain'] },
+]
+
+/* Pemasukan non-penjualan (jarang) */
+const INCOME_ENTRIES = [
+  { category: 'Sewa Tempat', min: 250000, max: 500000, note: 'Sewa ruang acara komunitas' },
+  { category: 'Komisi', min: 50000, max: 150000, note: 'Komisi partner pastry' },
+  { category: 'Pendapatan Lain', min: 30000, max: 120000, note: 'Penjualan kemasan & merch' },
+]
+
 /** Poin = 1 per Rp10.000 belanja */
 function tierOf(spend: number): string {
   if (spend >= 1_000_000) return 'gold'
@@ -98,7 +116,7 @@ function tierOf(spend: number): string {
   return 'regular'
 }
 
-export async function seedDemo(): Promise<{ products: number; sales: number }> {
+export async function seedDemo(): Promise<{ products: number; sales: number; cashEntries?: boolean }> {
   const now = new Date()
 
   // 1. Bersihkan (urutan FK)
@@ -116,6 +134,7 @@ export async function seedDemo(): Promise<{ products: number; sales: number }> {
   await db.promo.deleteMany()
   await db.supplier.deleteMany()
   await db.outlet.deleteMany()
+  await db.cashEntry.deleteMany()
 
   // 2. Pengaturan toko
   await db.setting.create({
@@ -325,5 +344,65 @@ export async function seedDemo(): Promise<{ products: number; sales: number }> {
     })
   }
 
-  return { products: created.length, sales: totalSales }
+  // 10. Keuangan: pengeluaran operasional & pemasukan lain (30 hari, deterministik)
+  const cashiers = ['Andi Wijaya', 'Maya Putri']
+  for (let d = 29; d >= 0; d--) {
+    const dayIdx = todayIdx - d
+    const isToday = d === 0
+
+    // Pengeluaran: bahan baku hampir tiap hari + 0-2 kategori lain
+    const picks = EXPENSE_CATEGORIES.map((c) => ({ c, on: c.category === 'Bahan Baku' ? true : rand() < 0.22 }))
+    for (const { c, on } of picks) {
+      if (!on) continue
+      const amount = Math.round((c.min + rand() * (c.max - c.min)) / 500) * 500
+      const hour = 7 + Math.floor(rand() * 12)
+      const createdAt = new Date(dayIdx * 86400000 + hour * 3600000)
+      if (isToday && createdAt > now) continue
+      await db.cashEntry.create({
+        data: {
+          type: 'expense', category: c.category, amount,
+          note: c.notes[Math.floor(rand() * c.notes.length)],
+          userName: cashiers[Math.floor(rand() * cashiers.length)],
+          createdAt,
+        },
+      })
+    }
+
+    // Gaji karyawan tanggal 1 (per bulan) — muncul jika hari ke-1 ada dalam rentang
+    const day = new Date(dayIdx * 86400000).getUTCDate()
+    if (day === 1) {
+      await db.cashEntry.create({
+        data: {
+          type: 'expense', category: 'Gaji Karyawan', amount: 9500000,
+          note: 'Gaji bulanan 5 karyawan', userName: 'Andi Wijaya',
+          createdAt: new Date(dayIdx * 86400000 + 10 * 3600000),
+        },
+      })
+      await db.cashEntry.create({
+        data: {
+          type: 'expense', category: 'Sewa Tempat', amount: 6000000,
+          note: 'Sewa ruko bulanan', userName: 'Andi Wijaya',
+          createdAt: new Date(dayIdx * 86400000 + 11 * 3600000),
+        },
+      })
+    }
+
+    // Pemasukan lain: ±15% hari
+    if (rand() < 0.15) {
+      const inc = INCOME_ENTRIES[Math.floor(rand() * INCOME_ENTRIES.length)]
+      const amount = Math.round((inc.min + rand() * (inc.max - inc.min)) / 500) * 500
+      const createdAt = new Date(dayIdx * 86400000 + (13 + Math.floor(rand() * 6)) * 3600000)
+      if (!(isToday && createdAt > now)) {
+        await db.cashEntry.create({
+          data: {
+            type: 'income', category: inc.category, amount,
+            note: inc.note, userName: cashiers[Math.floor(rand() * cashiers.length)],
+            createdAt,
+          },
+        })
+      }
+    }
+  }
+
+  return { products: created.length, sales: totalSales, cashEntries: true }
 }

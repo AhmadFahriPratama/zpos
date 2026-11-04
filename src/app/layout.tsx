@@ -14,10 +14,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "zPos — Aplikasi Kasir Modern",
+  title: "zPos — Kasir & Manajemen Ritel",
   description:
-    "Aplikasi kasir (POS) offline-first dengan server lokal: kasir, produk, stok, transaksi, shift, laporan, dan monitoring perangkat dalam satu aplikasi desktop yang elegan.",
-  keywords: ["zPos", "POS", "aplikasi kasir", "kasir", "point of sale"],
+    "Suite manajemen ritel offline-first dengan server lokal: kasir cepat, produk, stok, pembelian & supplier, pelanggan, keuangan, promo, multi-outlet, shift kasir, laporan lengkap, dan monitoring perangkat — dalam satu aplikasi desktop yang elegan.",
+  keywords: ["zPos", "POS", "aplikasi kasir", "kasir", "point of sale", "manajemen ritel", "inventaris", "iPos", "KeToko"],
 };
 
 export default function RootLayout({

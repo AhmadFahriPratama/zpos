@@ -11,6 +11,7 @@ import { StockView } from './stock-view'
 import { PurchasingView } from './purchasing-view'
 import { CustomersView } from './customers-view'
 import { EmployeesView } from './employees-view'
+import { KeuanganView } from './keuangan-view'
 import { PromosView } from './promos-view'
 import { OutletsView } from './outlets-view'
 import { TransactionsView } from './transactions-view'
@@ -81,6 +82,7 @@ export function ZPosApp() {
             {view === 'pembelian' && <PurchasingView />}
             {view === 'pelanggan' && <CustomersView />}
             {view === 'karyawan' && <EmployeesView />}
+            {view === 'keuangan' && <KeuanganView />}
             {view === 'promo' && <PromosView />}
             {view === 'outlet' && <OutletsView />}
             {view === 'transaksi' && <TransactionsView />}

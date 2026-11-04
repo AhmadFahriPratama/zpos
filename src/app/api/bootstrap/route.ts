@@ -1,12 +1,20 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { seedDemo } from '@/lib/seed'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 120
 
 export async function GET() {
   try {
+    // Pengalaman pertama kali: database kosong (mis. instalasi desktop baru) → isi data demo
+    const productCount = await db.product.count()
+    if (productCount === 0) {
+      await seedDemo().catch(() => undefined)
+    }
+
     const now = new Date()
-    const [products, categories, openShift, devices, setting, customers, promos, employees, outlets] = await Promise.all([
+    const [products, categories, openShift, devices, setting, customers, promos, employees, outlets, cashEntries] = await Promise.all([
       db.product.findMany({
         include: { category: { select: { id: true, name: true } } },
         orderBy: { name: 'asc' },
@@ -19,6 +27,7 @@ export async function GET() {
       db.promo.findMany({ where: { isActive: true }, orderBy: { createdAt: 'desc' } }),
       db.employee.findMany({ where: { isActive: true }, orderBy: { joinedAt: 'asc' } }),
       db.outlet.findMany({ orderBy: [{ isMain: 'desc' }, { name: 'asc' }] }),
+      db.cashEntry.findMany({ orderBy: { createdAt: 'desc' }, take: 1000 }),
     ])
 
     const startedAt = new Date(Date.now() - Math.round(process.uptime() * 1000)).toISOString()
@@ -44,6 +53,7 @@ export async function GET() {
       promos: validPromos,
       employees,
       outlets,
+      cashEntries: cashEntries.map((c) => ({ ...c, createdAt: c.createdAt.toISOString() })),
       serverInfo: {
         name: 'zPos Server',
         address: 'zpos.local:7788',
