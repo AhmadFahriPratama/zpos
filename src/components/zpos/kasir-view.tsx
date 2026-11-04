@@ -14,9 +14,175 @@ import { ProductThumb, Kbd } from './ui-bits'
 import { PaymentDialog } from './payment-dialog'
 import { ReceiptDialog } from './receipt-dialog'
 import {
-  BadgePercent, Pause, ScanBarcode, Search, ShoppingBag, StickyNote,
-  Trash2, TriangleAlert, Utensils, X,
+  BadgePercent, ChevronDown, Pause, ScanBarcode, Search, ShoppingBag, StickyNote,
+  Ticket, Trash2, TriangleAlert, UsersRound, Utensils, X,
 } from 'lucide-react'
+import { TierBadge } from './customers-view'
+
+/* ================= Bar Pelanggan & Promo ================= */
+function CustomerPromoBar({ base }: { base: number }) {
+  const customers = useZPos((s) => s.customers)
+  const promos = useZPos((s) => s.promos)
+  const selectedCustomerId = useZPos((s) => s.selectedCustomerId)
+  const selectedPromoId = useZPos((s) => s.selectedPromoId)
+  const setSelectedCustomer = useZPos((s) => s.setSelectedCustomer)
+  const setSelectedPromo = useZPos((s) => s.setSelectedPromo)
+
+  const [custOpen, setCustOpen] = useState(false)
+  const [promoOpen, setPromoOpen] = useState(false)
+  const [q, setQ] = useState('')
+
+  const selected = customers.find((c) => c.id === selectedCustomerId) ?? null
+  const filteredCust = (() => {
+    const t = q.trim().toLowerCase()
+    if (!t) return customers.slice(0, 30)
+    return customers
+      .filter((c) => c.name.toLowerCase().includes(t) || c.code.toLowerCase().includes(t) || c.phone.includes(t))
+      .slice(0, 30)
+  })()
+
+  const selectedPromo = promos.find((p) => p.id === selectedPromoId) ?? null
+
+  return (
+    <div className="mt-2 flex items-center gap-1.5">
+      {/* Pelanggan */}
+      <Popover open={custOpen} onOpenChange={(o) => { setCustOpen(o); if (o) setQ('') }}>
+        <PopoverTrigger asChild>
+          <button
+            className={cn(
+              'flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition-colors',
+              selected
+                ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
+                : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600'
+            )}
+            aria-label="Pilih pelanggan"
+          >
+            <UsersRound className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate text-left">
+              {selected ? selected.name : 'Pelanggan Umum'}
+            </span>
+            {selected && <TierBadge tier={selected.tier} className="shrink-0" />}
+            <ChevronDown className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-72 p-2">
+          <p className="px-1.5 pb-1.5 pt-0.5 text-xs font-bold text-zinc-900">Pilih Pelanggan</p>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" aria-hidden="true" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Cari nama / kode / HP…"
+              className="h-8 border-zinc-200 bg-white pl-8 text-xs"
+              autoFocus
+            />
+          </div>
+          <ul className="zpos-scroll mt-1.5 max-h-52 overflow-y-auto">
+            {filteredCust.length === 0 ? (
+              <li className="px-2 py-4 text-center text-xs text-zinc-400">
+                {q ? 'Tidak ada hasil' : 'Belum ada member terdaftar'}
+              </li>
+            ) : (
+              filteredCust.map((c) => (
+                <li key={c.id}>
+                  <button
+                    onClick={() => { setSelectedCustomer(c.id); setCustOpen(false) }}
+                    className={cn(
+                      'flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-zinc-100',
+                      selectedCustomerId === c.id && 'bg-emerald-50'
+                    )}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-xs font-semibold text-zinc-800">{c.name}</span>
+                      <span className="block truncate text-[10px] text-zinc-400">{c.code} · {angkaPoin(c.points)} poin</span>
+                    </span>
+                    <TierBadge tier={c.tier} className="shrink-0" />
+                  </button>
+                </li>
+              ))
+            )}
+          </ul>
+          <button
+            onClick={() => { setSelectedCustomer(null); setCustOpen(false) }}
+            className="mt-1 w-full rounded-md border border-zinc-200 py-1.5 text-[11px] font-semibold text-zinc-500 transition-colors hover:bg-zinc-50"
+          >
+            Tanpa Member (Umum)
+          </button>
+        </PopoverContent>
+      </Popover>
+
+      {/* Promo */}
+      <Popover open={promoOpen} onOpenChange={setPromoOpen}>
+        <PopoverTrigger asChild>
+          <button
+            className={cn(
+              'flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition-colors',
+              selectedPromo
+                ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+                : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600'
+            )}
+            aria-label="Pilih promo"
+          >
+            <Ticket className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate text-left">
+              {selectedPromo ? selectedPromo.code : 'Pilih Promo'}
+            </span>
+            <ChevronDown className="h-3 w-3 shrink-0 opacity-60" aria-hidden="true" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-72 p-2">
+          <p className="px-1.5 pb-1.5 pt-0.5 text-xs font-bold text-zinc-900">Promo Tersedia</p>
+          <ul className="zpos-scroll max-h-56 overflow-y-auto">
+            {promos.length === 0 ? (
+              <li className="px-2 py-4 text-center text-xs text-zinc-400">Belum ada promo aktif</li>
+            ) : (
+              promos.map((p) => {
+                const eligible = base >= p.minPurchase
+                const active = selectedPromoId === p.id
+                return (
+                  <li key={p.id}>
+                    <button
+                      disabled={!eligible}
+                      onClick={() => { setSelectedPromo(active ? null : p.id); setPromoOpen(false) }}
+                      className={cn(
+                        'flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left transition-colors',
+                        eligible ? 'hover:bg-zinc-100' : 'cursor-not-allowed opacity-40',
+                        active && 'bg-amber-50'
+                      )}
+                    >
+                      <span className="min-w-0">
+                        <span className="block font-mono text-xs font-bold text-zinc-800">{p.code}</span>
+                        <span className="block truncate text-[10px] text-zinc-400">
+                          min. {rupiah(p.minPurchase)}
+                          {!eligible && ' · belum memenuhi'}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-xs font-bold text-emerald-600">
+                        {p.type === 'percent' ? `${p.value}%` : rupiah(p.value)}
+                      </span>
+                    </button>
+                  </li>
+                )
+              })
+            )}
+          </ul>
+          {selectedPromoId && (
+            <button
+              onClick={() => { setSelectedPromo(null); setPromoOpen(false) }}
+              className="mt-1 w-full rounded-md border border-zinc-200 py-1.5 text-[11px] font-semibold text-zinc-500 transition-colors hover:bg-zinc-50"
+            >
+              Hapus Promo
+            </button>
+          )}
+        </PopoverContent>
+      </Popover>
+    </div>
+  )
+}
+
+function angkaPoin(n: number): string {
+  return new Intl.NumberFormat('id-ID').format(n)
+}
 
 /* ================= Panel Keranjang ================= */
 function CartPanel({ onPay }: { onPay: () => void }) {
@@ -45,14 +211,28 @@ function CartPanel({ onPay }: { onPay: () => void }) {
   const [discInput, setDiscInput] = useState('')
   const [discMode, setDiscMode] = useState<'rp' | 'pct'>('rp')
 
-  const totals = computeTotals(cart, orderDiscount, settings)
+  const selectedPromoId = useZPos((s) => s.selectedPromoId)
+  const promos = useZPos((s) => s.promos)
+  const setSelectedPromo = useZPos((s) => s.setSelectedPromo)
+  const selectedPromo = promos.find((p) => p.id === selectedPromoId) ?? null
+
   const itemCount = cart.reduce((s, c) => s + c.qty, 0)
-  const base = totals.subtotal - totals.itemDiscount
+  const base = cart.reduce((s, c) => s + c.price * c.qty - c.discount, 0)
+
+  // Preview diskon promo di klien — server tetap validasi ulang saat checkout
+  const promoDiscount = selectedPromo && base >= selectedPromo.minPurchase
+    ? (selectedPromo.type === 'percent'
+        ? Math.round((base * selectedPromo.value) / 100)
+        : Math.min(selectedPromo.value, base))
+    : 0
+  const effectiveDiscount = selectedPromo ? promoDiscount : orderDiscount
+  const totals = computeTotals(cart, effectiveDiscount, settings)
 
   const applyDiscount = () => {
     const n = Number(discInput) || 0
     const value = discMode === 'rp' ? n : Math.round((base * n) / 100)
     setOrderDiscount(value)
+    if (selectedPromoId) setSelectedPromo(null) // diskon manual menimpa promo
     setDiscOpen(false)
   }
 
@@ -243,6 +423,9 @@ function CartPanel({ onPay }: { onPay: () => void }) {
             </PopoverContent>
           </Popover>
         </div>
+
+        {/* Pelanggan & Promo */}
+        <CustomerPromoBar base={base} />
       </div>
 
       {!currentShift && (
@@ -341,8 +524,8 @@ function CartPanel({ onPay }: { onPay: () => void }) {
           )}
           {totals.orderDiscount > 0 && (
             <div className="flex justify-between text-amber-700">
-              <span>Diskon transaksi</span>
-              <span className="font-semibold tabular-nums">−{rupiah(totals.orderDiscount)}</span>
+              <span className="min-w-0 truncate">{selectedPromo ? `Promo ${selectedPromo.code}` : 'Diskon transaksi'}</span>
+              <span className="shrink-0 font-semibold tabular-nums">−{rupiah(totals.orderDiscount)}</span>
             </div>
           )}
           {settings?.taxEnabled && settings.taxRate > 0 && (

@@ -51,15 +51,71 @@ const CASHIERS = ['Sari', 'Dewi', 'Rio']
 const METHODS = ['cash', 'cash', 'cash', 'qris', 'qris', 'qris', 'card', 'transfer']
 const ORDER_TYPES = ['dinein', 'takeaway', 'takeaway']
 
+const OUTLETS = [
+  { name: 'Kopi Nusantara — Dago', address: 'Jl. Ir. H. Juanda No. 88, Bandung', phone: '0812-3456-7890', isMain: true },
+  { name: 'Kopi Nusantara — Cihampelas', address: 'Jl. Cihampelas No. 21, Bandung', phone: '0812-3456-7891', isMain: false },
+]
+
+const SUPPLIERS = [
+  { name: 'Roastery Sejati', contact: 'Pak Hartono', phone: '0813-2211-9001', email: 'sales@roasterysejati.id', address: 'Jl. Riau No. 12, Bandung' },
+  { name: 'CV Mitra Pangan', contact: 'Bu Ratna', phone: '0813-2211-9002', email: 'order@mitrapangan.co.id', address: 'Jl. Soekarno Hatta No. 450, Bandung' },
+  { name: 'PT Dairy Prima', contact: 'Pak Yusuf', phone: '0813-2211-9003', email: 'cs@dairyprima.com', address: 'Kawasan Industri Cikarang Blok D7' },
+  { name: 'UD Sumber Pastry', contact: 'Bu Wati', phone: '0813-2211-9004', email: 'wati@sumberpastry.id', address: 'Jl. Kebon Kopi No. 3, Cimahi' },
+]
+
+const EMPLOYEES = [
+  { name: 'Andi Wijaya', role: 'owner', phone: '0811-1000-0001', pin: '111111' },
+  { name: 'Maya Putri', role: 'manager', phone: '0811-1000-0002', pin: '222222' },
+  { name: 'Sari Rahma', role: 'kasir', phone: '0811-1000-0003', pin: '333333' },
+  { name: 'Dewi Lestari', role: 'kasir', phone: '0811-1000-0004', pin: '444444' },
+  { name: 'Rio Saputra', role: 'kasir', phone: '0811-1000-0005', pin: '555555' },
+  { name: 'Budi Santoso', role: 'gudang', phone: '0811-1000-0006', pin: '666666' },
+]
+
+const CUSTOMERS: Array<{ code: string; name: string; phone: string; email: string; note?: string }> = [
+  { code: 'MBR-0001', name: 'Rizky Pratama', phone: '0821-1111-0001', email: 'rizky@mail.com' },
+  { code: 'MBR-0002', name: 'Anisa Fitriani', phone: '0821-1111-0002', email: 'anisa@mail.com', note: 'Alergi susu sapi' },
+  { code: 'MBR-0003', name: 'Dimas Kurniawan', phone: '0821-1111-0003', email: 'dimas@mail.com' },
+  { code: 'MBR-0004', name: 'Putri Handayani', phone: '0821-1111-0004', email: 'putri@mail.com' },
+  { code: 'MBR-0005', name: 'Fajar Nugroho', phone: '0821-1111-0005', email: 'fajar@mail.com' },
+  { code: 'MBR-0006', name: 'Laras Ayu', phone: '0821-1111-0006', email: 'laras@mail.com' },
+  { code: 'MBR-0007', name: 'Bagus Wicaksono', phone: '0821-1111-0007', email: 'bagus@mail.com' },
+  { code: 'MBR-0008', name: 'Nadia Zahra', phone: '0821-1111-0008', email: 'nadia@mail.com' },
+  { code: 'MBR-0009', name: 'Ilham Ramadhan', phone: '0821-1111-0009', email: 'ilham@mail.com' },
+  { code: 'MBR-0010', name: 'Citra Kirana', phone: '0821-1111-0010', email: 'citra@mail.com' },
+]
+
+const PROMOS = [
+  { code: 'PROMO10', name: 'Diskon 10% Semua Menu', type: 'percent', value: 10, minPurchase: 50000, endsInDays: 30 },
+  { code: 'HEMAT5K', name: 'Potongan Rp5.000', type: 'fixed', value: 5000, minPurchase: 30000, endsInDays: 14 },
+  { code: 'SILVER20', name: 'Diskon 20% Member', type: 'percent', value: 20, minPurchase: 200000, endsInDays: -3, active: false },
+]
+
+/** Poin = 1 per Rp10.000 belanja */
+function tierOf(spend: number): string {
+  if (spend >= 1_000_000) return 'gold'
+  if (spend >= 400_000) return 'silver'
+  return 'regular'
+}
+
 export async function seedDemo(): Promise<{ products: number; sales: number }> {
+  const now = new Date()
+
   // 1. Bersihkan (urutan FK)
   await db.stockMove.deleteMany()
+  await db.purchaseItem.deleteMany()
+  await db.purchase.deleteMany()
   await db.saleItem.deleteMany()
   await db.sale.deleteMany()
   await db.shift.deleteMany()
   await db.product.deleteMany()
   await db.category.deleteMany()
   await db.setting.deleteMany()
+  await db.customer.deleteMany()
+  await db.employee.deleteMany()
+  await db.promo.deleteMany()
+  await db.supplier.deleteMany()
+  await db.outlet.deleteMany()
 
   // 2. Pengaturan toko
   await db.setting.create({
@@ -83,7 +139,7 @@ export async function seedDemo(): Promise<{ products: number; sales: number }> {
     cats.set(c.name, row.id)
   }
 
-  const created: Array<{ id: string; price: number; cost: number; name: string }> = []
+  const created: Array<{ id: string; sku: string; price: number; cost: number; name: string }> = []
   for (const p of PRODUCTS) {
     const row = await db.product.create({
       data: {
@@ -93,7 +149,7 @@ export async function seedDemo(): Promise<{ products: number; sales: number }> {
         categoryId: cats.get(p.cat) ?? null,
       },
     })
-    created.push({ id: row.id, price: p.price, cost: p.cost, name: p.name })
+    created.push({ id: row.id, sku: p.sku, price: p.price, cost: p.cost, name: p.name })
     if (p.stock > 0) {
       await db.stockMove.create({
         data: { productId: row.id, type: 'in', qty: p.stock, note: 'Stok awal demo' },
@@ -101,11 +157,79 @@ export async function seedDemo(): Promise<{ products: number; sales: number }> {
     }
   }
 
-  // 4. Riwayat penjualan 30 hari (RNG deterministik → data demo stabil)
+  // 4. Outlet, supplier, karyawan, promo — (now sudah didefinisi di atas)
+  for (const o of OUTLETS) await db.outlet.create({ data: o })
+  for (const s of SUPPLIERS) await db.supplier.create({ data: s })
+  for (const e of EMPLOYEES) {
+    await db.employee.create({
+      data: { name: e.name, role: e.role, phone: e.phone, pinHash: managerPinHash(e.pin) },
+    })
+  }
+  for (const p of PROMOS) {
+    const endsAt = new Date(now.getTime() + p.endsInDays * 86400000)
+    await db.promo.create({
+      data: {
+        code: p.code, name: p.name, type: p.type, value: p.value,
+        minPurchase: p.minPurchase, endsAt, isActive: p.active ?? true,
+      },
+    })
+  }
+
+  // 5. Pembelian (PO diterima 15 hari terakhir) → stok masuk
+  const suppliersDb = await db.supplier.findMany({ orderBy: { name: 'asc' } })
+  const poPlan: Array<{ sku: string; qty: number; cost: number }>[] = [
+    [
+      { sku: 'KPI-001', qty: 40, cost: 7000 }, { sku: 'KPI-002', qty: 40, cost: 8000 },
+      { sku: 'KPI-003', qty: 30, cost: 9500 }, { sku: 'KPI-004', qty: 20, cost: 10500 },
+    ],
+    [
+      { sku: 'NKO-004', qty: 60, cost: 2500 }, { sku: 'MKN-001', qty: 20, cost: 8000 },
+      { sku: 'MKN-002', qty: 15, cost: 14000 },
+    ],
+    [
+      { sku: 'KPI-005', qty: 25, cost: 10500 }, { sku: 'KPI-006', qty: 20, cost: 11500 },
+      { sku: 'NKO-001', qty: 15, cost: 12000 }, { sku: 'NKO-002', qty: 12, cost: 10500 },
+    ],
+    [
+      { sku: 'PAS-001', qty: 24, cost: 9500 }, { sku: 'PAS-002', qty: 30, cost: 5000 },
+      { sku: 'PAS-003', qty: 18, cost: 7500 },
+    ],
+  ]
+  for (let i = 0; i < poPlan.length; i++) {
+    const supplier = suppliersDb[i % suppliersDb.length]
+    const createdAt = new Date(now.getTime() - (15 - i * 3) * 86400000)
+    const items = poPlan[i].map((line) => {
+      const p = created.find((c) => c.sku === line.sku)!
+      return { productId: p.id, name: p.name, qty: line.qty, cost: line.cost, subtotal: line.qty * line.cost }
+    })
+    const total = items.reduce((a, b) => a + b.subtotal, 0)
+    await db.purchase.create({
+      data: {
+        poNo: `PO-${createdAt.toISOString().slice(0, 10).replace(/-/g, '')}-${String(i + 1).padStart(3, '0')}`,
+        supplierId: supplier.id, status: 'received', total,
+        note: 'Pembelian rutin mingguan', receivedAt: createdAt, createdAt,
+        items: { create: items },
+      },
+    })
+  }
+
+  // 7. Pelanggan + karyawan (setelah loop supaya tahu urutan); pelanggan dipakai di penjualan
+  const customersDb: Array<{ id: string; name: string }> = []
+  for (const c of CUSTOMERS) {
+    const row = await db.customer.create({
+      data: {
+        code: c.code, name: c.name, phone: c.phone, email: c.email,
+        note: c.note ?? null, isActive: true,
+      },
+    })
+    customersDb.push({ id: row.id, name: row.name })
+  }
+
+  // 8. Riwayat penjualan 30 hari (RNG deterministik → data demo stabil)
   const rand = mulberry32(20260214)
-  const now = new Date()
   const todayIdx = Math.floor(now.getTime() / 86400000)
   let totalSales = 0
+  const spendMap = new Map<string, { spend: number; visits: number }>()
 
   for (let d = 29; d >= 0; d--) {
     const dayIdx = todayIdx - d
@@ -162,18 +286,43 @@ export async function seedDemo(): Promise<{ products: number; sales: number }> {
       const ymd = createdAt.toISOString().slice(0, 10).replace(/-/g, '')
       const invoiceNo = `INV-${ymd}-${String(dayCount).padStart(4, '0')}`
 
+      // ±30% transaksi dari member
+      const useMember = customersDb.length > 0 && rand() < 0.3
+      const member = useMember ? customersDb[Math.floor(rand() * customersDb.length)] : null
+      if (member) {
+        const cur = spendMap.get(member.id) ?? { spend: 0, visits: 0 }
+        cur.spend += total
+        cur.visits += 1
+        spendMap.set(member.id, cur)
+      }
+
       await db.sale.create({
         data: {
           invoiceNo, status: 'paid', subtotal, discount: itemDisc, orderDiscount: 0,
           tax, total, paidAmount, changeAmount, method,
           orderType: ORDER_TYPES[Math.floor(rand() * ORDER_TYPES.length)],
           cashierName: CASHIERS[Math.floor(rand() * CASHIERS.length)],
+          customerId: member?.id ?? null,
+          customerName: member?.name ?? null,
           createdAt,
           items: { create: lines },
         },
       })
       totalSales++
     }
+  }
+
+  // 9. Agregat member: poin, kunjungan, tier
+  for (const [customerId, agg] of spendMap) {
+    await db.customer.update({
+      where: { id: customerId },
+      data: {
+        totalSpend: Math.round(agg.spend),
+        visitCount: agg.visits,
+        points: Math.floor(agg.spend / 10000),
+        tier: tierOf(agg.spend),
+      },
+    })
   }
 
   return { products: created.length, sales: totalSales }

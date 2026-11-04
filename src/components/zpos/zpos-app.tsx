@@ -8,6 +8,11 @@ import { DashboardView } from './dashboard-view'
 import { KasirView } from './kasir-view'
 import { ProductsView } from './products-view'
 import { StockView } from './stock-view'
+import { PurchasingView } from './purchasing-view'
+import { CustomersView } from './customers-view'
+import { EmployeesView } from './employees-view'
+import { PromosView } from './promos-view'
+import { OutletsView } from './outlets-view'
 import { TransactionsView } from './transactions-view'
 import { ShiftView } from './shift-view'
 import { ReportsView } from './reports-view'
@@ -73,6 +78,11 @@ export function ZPosApp() {
             {view === 'kasir' && <KasirView />}
             {view === 'produk' && <ProductsView />}
             {view === 'stok' && <StockView />}
+            {view === 'pembelian' && <PurchasingView />}
+            {view === 'pelanggan' && <CustomersView />}
+            {view === 'karyawan' && <EmployeesView />}
+            {view === 'promo' && <PromosView />}
+            {view === 'outlet' && <OutletsView />}
             {view === 'transaksi' && <TransactionsView />}
             {view === 'shift' && <ShiftView />}
             {view === 'laporan' && <ReportsView />}

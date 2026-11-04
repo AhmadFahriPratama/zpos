@@ -1,0 +1,636 @@
+     1→'use client'
+     2→
+     3→import { useEffect, useMemo, useRef, useState } from 'react'
+     4→import { useZPos, computeTotals } from '@/lib/store'
+     5→import { cn } from '@/lib/utils'
+     6→import { rupiah, orderTypeLabel } from '@/lib/format'
+     7→import type { Sale } from '@/lib/zpos-types'
+     8→import { Button } from '@/components/ui/button'
+     9→import { Input } from '@/components/ui/input'
+    10→import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+    11→import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+    12→import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+    13→import { ProductThumb, Kbd } from './ui-bits'
+    14→import { PaymentDialog } from './payment-dialog'
+    15→import { ReceiptDialog } from './receipt-dialog'
+    16→import {
+    17→  BadgePercent, Pause, ScanBarcode, Search, ShoppingBag, StickyNote,
+    18→  Trash2, TriangleAlert, Utensils, X,
+    19→} from 'lucide-react'
+    20→
+    21→/* ================= Panel Keranjang ================= */
+    22→function CartPanel({ onPay }: { onPay: () => void }) {
+    23→  const cart = useZPos((s) => s.cart)
+    24→  const settings = useZPos((s) => s.settings)
+    25→  const orderType = useZPos((s) => s.orderType)
+    26→  const orderNote = useZPos((s) => s.orderNote)
+    27→  const orderDiscount = useZPos((s) => s.orderDiscount)
+    28→  const heldOrders = useZPos((s) => s.heldOrders)
+    29→  const currentShift = useZPos((s) => s.currentShift)
+    30→  const setView = useZPos((s) => s.setView)
+    31→  const setQty = useZPos((s) => s.setQty)
+    32→  const setItemDiscount = useZPos((s) => s.setItemDiscount)
+    33→  const removeFromCart = useZPos((s) => s.removeFromCart)
+    34→  const clearCart = useZPos((s) => s.clearCart)
+    35→  const setOrderType = useZPos((s) => s.setOrderType)
+    36→  const setOrderNote = useZPos((s) => s.setOrderNote)
+    37→  const setOrderDiscount = useZPos((s) => s.setOrderDiscount)
+    38→  const holdOrder = useZPos((s) => s.holdOrder)
+    39→  const resumeHeld = useZPos((s) => s.resumeHeld)
+    40→  const removeHeld = useZPos((s) => s.removeHeld)
+    41→
+    42→  const [discOpen, setDiscOpen] = useState(false)
+    43→  const [noteOpen, setNoteOpen] = useState(false)
+    44→  const [heldOpen, setHeldOpen] = useState(false)
+    45→  const [discInput, setDiscInput] = useState('')
+    46→  const [discMode, setDiscMode] = useState<'rp' | 'pct'>('rp')
+    47→
+    48→  const totals = computeTotals(cart, orderDiscount, settings)
+    49→  const itemCount = cart.reduce((s, c) => s + c.qty, 0)
+    50→  const base = totals.subtotal - totals.itemDiscount
+    51→
+    52→  const applyDiscount = () => {
+    53→    const n = Number(discInput) || 0
+    54→    const value = discMode === 'rp' ? n : Math.round((base * n) / 100)
+    55→    setOrderDiscount(value)
+    56→    setDiscOpen(false)
+    57→  }
+    58→
+    59→  return (
+    60→    <div className="flex h-full min-h-0 flex-col">
+    61→      {/* Header */}
+    62→      <div className="shrink-0 border-b border-zinc-100 px-4 pb-3 pt-4">
+    63→        <div className="flex items-center justify-between">
+    64→          <div className="flex items-center gap-2">
+    65→            <ShoppingBag className="h-4 w-4 text-zinc-500" aria-hidden="true" />
+    66→            <p className="text-sm font-bold text-zinc-900">Pesanan Baru</p>
+    67→            {itemCount > 0 && (
+    68→              <span className="rounded-full bg-zinc-900 px-2 py-0.5 text-[10px] font-bold text-white">
+    69→                {itemCount} item
+    70→              </span>
+    71→            )}
+    72→          </div>
+    73→          <div className="flex items-center gap-1">
+    74→            <Popover open={heldOpen} onOpenChange={setHeldOpen}>
+    75→              <PopoverTrigger asChild>
+    76→                <button
+    77→                  className="relative flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700"
+    78→                  aria-label="Pesanan diparkir"
+    79→                >
+    80→                  <Pause className="h-4 w-4" />
+    81→                  {heldOrders.length > 0 && (
+    82→                    <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold text-white">
+    83→                      {heldOrders.length}
+    84→                    </span>
+    85→                  )}
+    86→                </button>
+    87→              </PopoverTrigger>
+    88→              <PopoverContent align="end" className="w-72 p-2">
+    89→                <p className="px-2 pb-1.5 pt-1 text-xs font-bold text-zinc-900">Pesanan Diparkir</p>
+    90→                {heldOrders.length === 0 ? (
+    91→                  <p className="px-2 py-4 text-center text-xs text-zinc-400">
+    92→                    Tekan tombol <Pause className="inline h-3 w-3" aria-hidden="true" /> untuk menunda pesanan.
+    93→                  </p>
+    94→                ) : (
+    95→                  <ul className="space-y-1">
+    96→                    {heldOrders.map((h) => (
+    97→                      <li key={h.id} className="flex items-center justify-between gap-2 rounded-lg border border-zinc-100 px-2.5 py-2">
+    98→                        <div className="min-w-0">
+    99→                          <p className="text-xs font-semibold text-zinc-800">
+   100→                            {h.items.reduce((a, b) => a + b.qty, 0)} item · {rupiah(h.items.reduce((a, b) => a + b.price * b.qty, 0))}
+   101→                          </p>
+   102→                          <p className="text-[10px] text-zinc-400">
+   103→                            {orderTypeLabel(h.orderType)} · {new Date(h.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+   104→                          </p>
+   105→                        </div>
+   106→                        <div className="flex shrink-0 gap-1">
+   107→                          <button
+   108→                            onClick={() => { resumeHeld(h.id); setHeldOpen(false) }}
+   109→                            className="rounded-md bg-zinc-900 px-2 py-1 text-[10px] font-bold text-white hover:bg-zinc-700"
+   110→                          >
+   111→                            Lanjut
+   112→                          </button>
+   113→                          <button
+   114→                            onClick={() => removeHeld(h.id)}
+   115→                            className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-300 hover:bg-rose-50 hover:text-rose-600"
+   116→                            aria-label="Hapus pesanan diparkir"
+   117→                          >
+   118→                            <Trash2 className="h-3.5 w-3.5" />
+   119→                          </button>
+   120→                        </div>
+   121→                      </li>
+   122→                    ))}
+   123→                  </ul>
+   124→                )}
+   125→              </PopoverContent>
+   126→            </Popover>
+   127→            <button
+   128→              onClick={() => {
+   129→                if (cart.length > 0 && window.confirm('Kosongkan keranjang?')) clearCart()
+   130→              }}
+   131→              className="flex h-8 w-8 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-rose-50 hover:text-rose-600"
+   132→              aria-label="Kosongkan keranjang"
+   133→            >
+   134→              <Trash2 className="h-4 w-4" />
+   135→            </button>
+   136→          </div>
+   137→        </div>
+   138→
+   139→        {/* Tipe order + diskon + catatan */}
+   140→        <div className="mt-3 flex items-center gap-1.5">
+   141→          <div className="flex rounded-lg border border-zinc-200 p-0.5">
+   142→            {([
+   143→              { id: 'dinein' as const, label: 'Di Tempat', icon: Utensils },
+   144→              { id: 'takeaway' as const, label: 'Bawa Pulang', icon: ShoppingBag },
+   145→            ]).map((t) => (
+   146→              <button
+   147→                key={t.id}
+   148→                onClick={() => setOrderType(t.id)}
+   149→                className={cn(
+   150→                  'flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-colors',
+   151→                  orderType === t.id ? 'bg-zinc-900 text-white' : 'text-zinc-500 hover:text-zinc-900'
+   152→                )}
+   153→              >
+   154→                <t.icon className="h-3 w-3" aria-hidden="true" />
+   155→                {t.label}
+   156→              </button>
+   157→            ))}
+   158→          </div>
+   159→          <Popover open={discOpen} onOpenChange={(o) => { setDiscOpen(o); if (o) setDiscInput(orderDiscount ? String(orderDiscount) : '') }}>
+   160→            <PopoverTrigger asChild>
+   161→              <button
+   162→                className={cn(
+   163→                  'flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition-colors',
+   164→                  orderDiscount > 0
+   165→                    ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+   166→                    : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600'
+   167→                )}
+   168→              >
+   169→                <BadgePercent className="h-3.5 w-3.5" aria-hidden="true" />
+   170→                {orderDiscount > 0 ? `−${rupiah(orderDiscount)}` : 'Diskon'}
+   171→              </button>
+   172→            </PopoverTrigger>
+   173→            <PopoverContent align="end" className="w-64 p-3">
+   174→              <p className="text-xs font-bold text-zinc-900">Diskon Transaksi</p>
+   175→              <div className="mt-2 flex rounded-lg border border-zinc-200 p-0.5">
+   176→                {(['rp', 'pct'] as const).map((m) => (
+   177→                  <button
+   178→                    key={m}
+   179→                    onClick={() => setDiscMode(m)}
+   180→                    className={cn(
+   181→                      'flex-1 rounded-md py-1 text-[11px] font-bold',
+   182→                      discMode === m ? 'bg-zinc-900 text-white' : 'text-zinc-500'
+   183→                    )}
+   184→                  >
+   185→                    {m === 'rp' ? 'Rupiah' : 'Persen %'}
+   186→                  </button>
+   187→                ))}
+   188→              </div>
+   189→              <Input
+   190→                value={discInput}
+   191→                onChange={(e) => setDiscInput(e.target.value.replace(/[^0-9]/g, ''))}
+   192→                placeholder={discMode === 'rp' ? '0' : '0'}
+   193→                inputMode="numeric"
+   194→                className="mt-2 h-9 text-right font-mono font-bold"
+   195→                onKeyDown={(e) => e.key === 'Enter' && applyDiscount()}
+   196→              />
+   197→              {discMode === 'pct' && discInput && (
+   198→                <p className="mt-1 text-right text-[11px] font-semibold text-amber-700">
+   199→                  = {rupiah(Math.round((base * Number(discInput)) / 100))}
+   200→                </p>
+   201→              )}
+   202→              <div className="mt-2 flex gap-1">
+   203→                {[5, 10, 15].map((p) => (
+   204→                  <button
+   205→                    key={p}
+   206→                    onClick={() => { setDiscMode('pct'); setDiscInput(String(p)) }}
+   207→                    className="flex-1 rounded-md border border-zinc-200 py-1 text-[11px] font-semibold text-zinc-600 hover:border-zinc-900"
+   208→                  >
+   209→                    {p}%
+   210→                  </button>
+   211→                ))}
+   212→              </div>
+   213→              <Button size="sm" className="mt-2 h-8 w-full bg-zinc-900 text-xs font-bold text-white hover:bg-zinc-700" onClick={applyDiscount}>
+   214→                Terapkan
+   215→              </Button>
+   216→            </PopoverContent>
+   217→          </Popover>
+   218→          <Popover open={noteOpen} onOpenChange={setNoteOpen}>
+   219→            <PopoverTrigger asChild>
+   220→              <button
+   221→                className={cn(
+   222→                  'flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition-colors',
+   223→                  orderNote
+   224→                    ? 'bg-zinc-100 text-zinc-700'
+   225→                    : 'text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600'
+   226→                )}
+   227→              >
+   228→                <StickyNote className="h-3.5 w-3.5" aria-hidden="true" />
+   229→                {orderNote ? 'Catatan' : 'Catatan'}
+   230→              </button>
+   231→            </PopoverTrigger>
+   232→            <PopoverContent align="end" className="w-64 p-3">
+   233→              <p className="text-xs font-bold text-zinc-900">Catatan Pesanan</p>
+   234→              <textarea
+   235→                value={orderNote}
+   236→                onChange={(e) => setOrderNote(e.target.value.slice(0, 200))}
+   237→                placeholder="mis. Less sugar, tanpa es…"
+   238→                className="mt-2 min-h-16 w-full rounded-lg border border-zinc-200 p-2 text-xs outline-none focus:border-zinc-900"
+   239→              />
+   240→              <Button size="sm" className="mt-2 h-8 w-full bg-zinc-900 text-xs font-bold text-white hover:bg-zinc-700" onClick={() => setNoteOpen(false)}>
+   241→                Simpan
+   242→              </Button>
+   243→            </PopoverContent>
+   244→          </Popover>
+   245→        </div>
+   246→      </div>
+   247→
+   248→      {!currentShift && (
+   249→        <button
+   250→          onClick={() => setView('shift')}
+   251→          className="flex shrink-0 items-center gap-2 border-b border-amber-100 bg-amber-50 px-4 py-2 text-left text-xs text-amber-800 transition-colors hover:bg-amber-100"
+   252→        >
+   253→          <TriangleAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+   254→          <span className="flex-1">Shift belum dibuka — rekap kas tidak terekam. <u>Buka shift</u></span>
+   255→        </button>
+   256→      )}
+   257→
+   258→      {/* Daftar item */}
+   259→      {cart.length === 0 ? (
+   260→        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center">
+   261→          <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-300">
+   262→            <ShoppingBag className="h-7 w-7" aria-hidden="true" />
+   263→          </span>
+   264→          <p className="text-sm font-semibold text-zinc-500">Keranjang kosong</p>
+   265→          <p className="max-w-[220px] text-xs text-zinc-400">
+   266→            Pilih produk dari katalog atau scan barcode untuk memulai transaksi.
+   267→          </p>
+   268→        </div>
+   269→      ) : (
+   270→        <ul className="zpos-scroll min-h-0 flex-1 divide-y divide-zinc-100 overflow-y-auto">
+   271→          {cart.map((item) => (
+   272→            <li key={item.productId} className="flex gap-2.5 px-4 py-3">
+   273→              <ProductThumb src={item.image} name={item.name} className="h-10 w-10 shrink-0 rounded-lg border border-zinc-100" />
+   274→              <div className="min-w-0 flex-1">
+   275→                <div className="flex items-start justify-between gap-2">
+   276→                  <p className="min-w-0 truncate text-[13px] font-semibold text-zinc-900">{item.name}</p>
+   277→                  <p className="shrink-0 text-[13px] font-bold tabular-nums text-zinc-900">
+   278→                    {rupiah(item.price * item.qty - item.discount)}
+   279→                  </p>
+   280→                </div>
+   281→                <p className="text-[11px] text-zinc-400">
+   282→                  {rupiah(item.price)} / {item.unit}
+   283→                  {item.discount > 0 && <span className="ml-1.5 font-semibold text-amber-600">−{rupiah(item.discount)}</span>}
+   284→                </p>
+   285→                <div className="mt-1.5 flex items-center justify-between">
+   286→                  <div className="flex items-center rounded-lg border border-zinc-200">
+   287→                    <button
+   288→                      onClick={() => setQty(item.productId, item.qty - 1)}
+   289→                      className="flex h-7 w-7 items-center justify-center text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
+   290→                      aria-label={`Kurangi ${item.name}`}
+   291→                    >
+   292→                      <span className="text-sm font-bold leading-none">−</span>
+   293→                    </button>
+   294→                    <span className="w-8 border-x border-zinc-200 text-center font-mono text-xs font-bold tabular-nums leading-7">
+   295→                      {item.qty}
+   296→                    </span>
+   297→                    <button
+   298→                      onClick={() => setQty(item.productId, item.qty + 1)}
+   299→                      className="flex h-7 w-7 items-center justify-center text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
+   300→                      aria-label={`Tambah ${item.name}`}
+   301→                    >
+   302→                      <span className="text-sm font-bold leading-none">+</span>
+   303→                    </button>
+   304→                  </div>
+   305→                  <div className="flex items-center gap-1.5">
+   306→                    <input
+   307→                      value={item.discount || ''}
+   308→                      onChange={(e) => setItemDiscount(item.productId, Number(e.target.value.replace(/[^0-9]/g, '')) || 0)}
+   309→                      placeholder="disc."
+   310→                      className="h-7 w-14 rounded-md border border-zinc-200 px-1.5 text-right font-mono text-[11px] tabular-nums outline-none focus:border-zinc-900"
+   311→                      inputMode="numeric"
+   312→                      aria-label={`Diskon ${item.name}`}
+   313→                    />
+   314→                    <button
+   315→                      onClick={() => removeFromCart(item.productId)}
+   316→                      className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-300 transition-colors hover:bg-rose-50 hover:text-rose-600"
+   317→                      aria-label={`Hapus ${item.name}`}
+   318→                    >
+   319→                      <X className="h-3.5 w-3.5" />
+   320→                    </button>
+   321→                  </div>
+   322→                </div>
+   323→              </div>
+   324→            </li>
+   325→          ))}
+   326→        </ul>
+   327→      )}
+   328→
+   329→      {/* Ringkasan & bayar */}
+   330→      <div className="shrink-0 border-t border-zinc-100 bg-zinc-50/70 px-4 py-3">
+   331→        <div className="space-y-1 text-xs">
+   332→          <div className="flex justify-between text-zinc-500">
+   333→            <span>Subtotal</span>
+   334→            <span className="font-semibold tabular-nums text-zinc-700">{rupiah(totals.subtotal)}</span>
+   335→          </div>
+   336→          {totals.itemDiscount > 0 && (
+   337→            <div className="flex justify-between text-amber-700">
+   338→              <span>Diskon item</span>
+   339→              <span className="font-semibold tabular-nums">−{rupiah(totals.itemDiscount)}</span>
+   340→            </div>
+   341→          )}
+   342→          {totals.orderDiscount > 0 && (
+   343→            <div className="flex justify-between text-amber-700">
+   344→              <span>Diskon transaksi</span>
+   345→              <span className="font-semibold tabular-nums">−{rupiah(totals.orderDiscount)}</span>
+   346→            </div>
+   347→          )}
+   348→          {settings?.taxEnabled && settings.taxRate > 0 && (
+   349→            <div className="flex justify-between text-zinc-500">
+   350→              <span>Pajak PPN {settings.taxRate}%</span>
+   351→              <span className="font-semibold tabular-nums text-zinc-700">{rupiah(totals.tax)}</span>
+   352→            </div>
+   353→          )}
+   354→        </div>
+   355→        <div className="mt-2 flex items-baseline justify-between border-t border-dashed border-zinc-200 pt-2">
+   356→          <span className="text-sm font-bold text-zinc-900">Total</span>
+   357→          <span className="text-2xl font-extrabold tracking-tight tabular-nums text-zinc-900">
+   358→            {rupiah(totals.total)}
+   359→          </span>
+   360→        </div>
+   361→        <div className="mt-3 grid grid-cols-[1fr_2fr] gap-2">
+   362→          <Button
+   363→            variant="outline"
+   364→            className="h-11 border-zinc-200 font-semibold text-zinc-700 hover:bg-zinc-100"
+   365→            disabled={cart.length === 0}
+   366→            onClick={() => holdOrder()}
+   367→          >
+   368→            <Pause className="mr-1.5 h-4 w-4" aria-hidden="true" /> Tunda
+   369→          </Button>
+   370→          <Button
+   371→            className="h-11 bg-emerald-600 text-[15px] font-bold tracking-wide hover:bg-emerald-700 disabled:opacity-40"
+   372→            disabled={cart.length === 0}
+   373→            onClick={onPay}
+   374→          >
+   375→            Bayar — {rupiah(totals.total)}
+   376→          </Button>
+   377→        </div>
+   378→      </div>
+   379→    </div>
+   380→  )
+   381→}
+   382→
+   383→/* ================= Layar Kasir ================= */
+   384→export function KasirView() {
+   385→  const products = useZPos((s) => s.products)
+   386→  const categories = useZPos((s) => s.categories)
+   387→  const cart = useZPos((s) => s.cart)
+   388→  const settings = useZPos((s) => s.settings)
+   389→  const addToCart = useZPos((s) => s.addToCart)
+   390→  const orderDiscount = useZPos((s) => s.orderDiscount)
+   391→
+   392→  const [search, setSearch] = useState('')
+   393→  const [activeCat, setActiveCat] = useState<string>('all')
+   394→  const [paymentOpen, setPaymentOpen] = useState(false)
+   395→  const [sheetOpen, setSheetOpen] = useState(false)
+   396→  const [receipt, setReceipt] = useState<Sale | null>(null)
+   397→  const searchRef = useRef<HTMLInputElement>(null)
+   398→
+   399→  const totals = computeTotals(cart, orderDiscount, settings)
+   400→  const itemCount = cart.reduce((s, c) => s + c.qty, 0)
+   401→
+   402→  // Shortcut: "/" fokus cari · F9 bayar · Esc tutup sheet
+   403→  useEffect(() => {
+   404→    const handler = (e: KeyboardEvent) => {
+   405→      const tag = document.activeElement?.tagName
+   406→      if (e.key === '/' && tag !== 'INPUT' && tag !== 'TEXTAREA') {
+   407→        e.preventDefault()
+   408→        searchRef.current?.focus()
+   409→      }
+   410→      if (e.key === 'F9') {
+   411→        e.preventDefault()
+   412→        if (useZPos.getState().cart.length > 0) setPaymentOpen(true)
+   413→      }
+   414→    }
+   415→    window.addEventListener('keydown', handler)
+   416→    return () => window.removeEventListener('keydown', handler)
+   417→  }, [])
+   418→
+   419→  const catCounts = useMemo(() => {
+   420→    const m = new Map<string, number>()
+   421→    for (const p of products) {
+   422→      if (!p.isActive) continue
+   423→      const key = p.categoryId ?? 'none'
+   424→      m.set(key, (m.get(key) ?? 0) + 1)
+   425→    }
+   426→    return m
+   427→  }, [products])
+   428→
+   429→  const filtered = useMemo(() => {
+   430→    const q = search.trim().toLowerCase()
+   431→    return products.filter((p) => {
+   432→      if (!p.isActive) return false
+   433→      if (activeCat !== 'all' && p.categoryId !== activeCat) return false
+   434→      if (!q) return true
+   435→      return (
+   436→        p.name.toLowerCase().includes(q) ||
+   437→        p.sku.toLowerCase().includes(q) ||
+   438→        (p.barcode ?? '').includes(q)
+   439→      )
+   440→    })
+   441→  }, [products, search, activeCat])
+   442→
+   443→  const onSearchEnter = () => {
+   444→    const q = search.trim().toLowerCase()
+   445→    if (!q) return
+   446→    const exact = products.find(
+   447→      (p) => p.isActive && ((p.barcode ?? '').toLowerCase() === q || p.sku.toLowerCase() === q)
+   448→    )
+   449→    if (exact) {
+   450→      addToCart(exact)
+   451→      setSearch('')
+   452→    }
+   453→  }
+   454→
+   455→  const openPayment = () => {
+   456→    setSheetOpen(false)
+   457→    setPaymentOpen(true)
+   458→  }
+   459→
+   460→  const catChips = [
+   461→    { id: 'all', name: 'Semua', count: products.filter((p) => p.isActive).length },
+   462→    ...categories.map((c) => ({ id: c.id, name: c.name, count: catCounts.get(c.id) ?? 0 })),
+   463→  ]
+   464→
+   465→  return (
+   466→    <div className="flex h-full min-h-0">
+   467→      {/* ============ Katalog ============ */}
+   468→      <section className="flex min-w-0 flex-1 flex-col" aria-label="Katalog produk">
+   469→        <div className="shrink-0 border-b border-zinc-200 bg-white px-4 py-3">
+   470→          <div className="flex items-center gap-2.5">
+   471→            <div className="relative flex-1">
+   472→              <ScanBarcode className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" aria-hidden="true" />
+   473→              <Input
+   474→                ref={searchRef}
+   475→                value={search}
+   476→                onChange={(e) => setSearch(e.target.value)}
+   477→                onKeyDown={(e) => e.key === 'Enter' && onSearchEnter()}
+   478→                placeholder="Cari nama / SKU / scan barcode…"
+   479→                className="h-10 border-zinc-200 bg-zinc-50 pl-9 pr-14 text-sm focus-visible:bg-white"
+   480→                aria-label="Cari produk"
+   481→              />
+   482→              {search ? (
+   483→                <button
+   484→                  onClick={() => setSearch('')}
+   485→                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700"
+   486→                  aria-label="Hapus pencarian"
+   487→                >
+   488→                  <X className="h-4 w-4" />
+   489→                </button>
+   490→              ) : (
+   491→                <span className="absolute right-2.5 top-1/2 hidden -translate-y-1/2 sm:block"><Kbd>/</Kbd></span>
+   492→              )}
+   493→            </div>
+   494→            <span className="hidden shrink-0 rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-zinc-500 sm:block">
+   495→              {filtered.length} produk
+   496→            </span>
+   497→          </div>
+   498→
+   499→          <div className="zpos-scroll -mx-4 mt-2.5 flex gap-1.5 overflow-x-auto px-4 pb-0.5">
+   500→            {catChips.map((c) => (
+   501→              <button
+   502→                key={c.id}
+   503→                onClick={() => setActiveCat(c.id)}
+   504→                className={cn(
+   505→                  'flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition-colors',
+   506→                  activeCat === c.id
+   507→                    ? 'border-zinc-900 bg-zinc-900 text-white'
+   508→                    : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-400'
+   509→                )}
+   510→              >
+   511→                {c.name}
+   512→                <span
+   513→                  className={cn(
+   514→                    'rounded-full px-1.5 py-px text-[10px] font-bold',
+   515→                    activeCat === c.id ? 'bg-white/20 text-white' : 'bg-zinc-100 text-zinc-400'
+   516→                  )}
+   517→                >
+   518→                  {c.count}
+   519→                </span>
+   520→              </button>
+   521→            ))}
+   522→          </div>
+   523→        </div>
+   524→
+   525→        {/* Grid produk */}
+   526→        <div className="zpos-scroll min-h-0 flex-1 overflow-y-auto p-4 pb-24 xl:pb-4">
+   527→          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+   528→            {filtered.map((p) => {
+   529→              const habis = p.stock <= 0
+   530→              const kritis = !habis && p.stock <= p.minStock
+   531→              return (
+   532→                <button
+   533→                  key={p.id}
+   534→                  onClick={() => addToCart(p)}
+   535→                  disabled={habis}
+   536→                  className={cn(
+   537→                    'group relative flex flex-col overflow-hidden rounded-xl border bg-white text-left shadow-sm transition-all',
+   538→                    habis
+   539→                      ? 'cursor-not-allowed border-zinc-200 opacity-55'
+   540→                      : 'border-zinc-200 hover:-translate-y-0.5 hover:border-zinc-900 hover:shadow-lg active:scale-[0.98]'
+   541→                  )}
+   542→                >
+   543→                  <div className="relative aspect-square w-full overflow-hidden bg-zinc-100">
+   544→                    <ProductThumb
+   545→                      src={p.image}
+   546→                      name={p.name}
+   547→                      className="h-full w-full transition-transform duration-300 group-hover:scale-105"
+   548→                    />
+   549→                    {habis && (
+   550→                      <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
+   551→                        <span className="rounded-full bg-rose-600 px-3 py-1 text-[11px] font-bold text-white">HABIS</span>
+   552→                      </div>
+   553→                    )}
+   554→                    {kritis && (
+   555→                      <span className="absolute left-2 top-2 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
+   556→                        Sisa {p.stock}
+   557→                      </span>
+   558→                    )}
+   559→                  </div>
+   560→                  <div className="flex flex-1 flex-col p-2.5">
+   561→                    <p className="min-h-8 line-clamp-2 text-[13px] font-semibold leading-snug text-zinc-900">{p.name}</p>
+   562→                    <div className="mt-auto flex items-baseline justify-between pt-1.5">
+   563→                      <p className="text-sm font-bold tabular-nums text-zinc-900">{rupiah(p.price)}</p>
+   564→                      <span className="text-[10px] font-medium text-zinc-400">{p.category?.name ?? '—'}</span>
+   565→                    </div>
+   566→                  </div>
+   567→                </button>
+   568→              )
+   569→            })}
+   570→            {filtered.length === 0 && (
+   571→              <div className="col-span-full flex flex-col items-center gap-2 rounded-xl border border-dashed border-zinc-300 bg-white py-14 text-center">
+   572→                <Search className="h-6 w-6 text-zinc-300" aria-hidden="true" />
+   573→                <p className="text-sm font-semibold text-zinc-600">Tidak ada produk cocok</p>
+   574→                <p className="text-xs text-zinc-400">Coba kata kunci lain atau ganti kategori.</p>
+   575→              </div>
+   576→            )}
+   577→          </div>
+   578→        </div>
+   579→
+   580→        {/* Bar keranjang mobile */}
+   581→        <div className="shrink-0 border-t border-zinc-200 bg-white px-4 py-3 xl:hidden">
+   582→          <button
+   583→            onClick={() => setSheetOpen(true)}
+   584→            disabled={cart.length === 0}
+   585→            className="flex w-full items-center justify-between rounded-xl bg-zinc-900 px-4 py-3 text-white transition-colors hover:bg-zinc-800 disabled:opacity-40"
+   586→          >
+   587→            <span className="flex items-center gap-2.5">
+   588→              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/15">
+   589→                <ShoppingBag className="h-4 w-4" aria-hidden="true" />
+   590→              </span>
+   591→              <span className="text-left">
+   592→                <span className="block text-[11px] font-medium text-zinc-300">{itemCount} item dipesan</span>
+   593→                <span className="block text-sm font-bold tabular-nums">{rupiah(totals.total)}</span>
+   594→              </span>
+   595→            </span>
+   596→            <span className="rounded-lg bg-emerald-500 px-3.5 py-2 text-sm font-bold">Lihat Keranjang</span>
+   597→          </button>
+   598→        </div>
+   599→      </section>
+   600→
+   601→      {/* ============ Keranjang desktop ============ */}
+   602→      <aside
+   603→        className="hidden w-[380px] shrink-0 border-l border-zinc-200 bg-white 2xl:w-[400px] xl:flex xl:flex-col"
+   604→        aria-label="Keranjang belanja"
+   605→      >
+   606→        <CartPanel onPay={openPayment} />
+   607→      </aside>
+   608→
+   609→      {/* Keranjang mobile (sheet) */}
+   610→      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+   611→        <SheetContent side="right" className="w-full max-w-[400px] p-0 sm:max-w-[400px]">
+   612→          <SheetHeader className="sr-only">
+   613→            <SheetTitle>Keranjang</SheetTitle>
+   614→          </SheetHeader>
+   615→          <CartPanel onPay={openPayment} />
+   616→        </SheetContent>
+   617→      </Sheet>
+   618→
+   619→      <PaymentDialog
+   620→        key={paymentOpen ? 'open' : 'closed'}
+   621→        open={paymentOpen}
+   622→        onOpenChange={setPaymentOpen}
+   623→        onPaid={(sale) => {
+   624→          setPaymentOpen(false)
+   625→          setReceipt(sale)
+   626→        }}
+   627→      />
+   628→      <ReceiptDialog
+   629→        sale={receipt}
+   630→        open={receipt !== null}
+   631→        onOpenChange={(o) => !o && setReceipt(null)}
+   632→      />
+   633→    </div>
+   634→  )
+   635→}
+   636→

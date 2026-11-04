@@ -4,12 +4,14 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { toast } from 'sonner'
 import type {
-  Bootstrap, CartItem, Category, Device, HeldOrder, Product, Sale, Settings, Shift, StockMove, Totals,
+  Bootstrap, CartItem, Category, Customer, Device, Employee, HeldOrder, Outlet,
+  Product, Promo, Purchase, Sale, Settings, Shift, StockMove, Supplier, Totals,
 } from './zpos-types'
 import { rupiah } from './format'
 
 export type View =
-  | 'dashboard' | 'kasir' | 'produk' | 'stok'
+  | 'dashboard' | 'kasir' | 'produk' | 'stok' | 'pembelian'
+  | 'pelanggan' | 'karyawan' | 'promo' | 'outlet'
   | 'transaksi' | 'shift' | 'laporan' | 'monitoring' | 'pengaturan'
 
 export type OrderType = 'dinein' | 'takeaway'
@@ -41,6 +43,9 @@ interface ZPosState {
   devices: Device[]
   settings: Settings | null
   serverInfo: Bootstrap['serverInfo'] | null
+  customers: Customer[]
+  promos: Promo[]
+  employees: Employee[]
 
   cart: CartItem[]
   orderType: OrderType
@@ -49,6 +54,8 @@ interface ZPosState {
   heldOrders: HeldOrder[]
   lastSale: Sale | null
   cashier: string
+  selectedCustomerId: string | null
+  selectedPromoId: string | null
 
   setView: (v: View) => void
   setCashier: (c: string) => void
@@ -62,6 +69,8 @@ interface ZPosState {
   setOrderType: (t: OrderType) => void
   setOrderNote: (n: string) => void
   setOrderDiscount: (d: number) => void
+  setSelectedCustomer: (id: string | null) => void
+  setSelectedPromo: (id: string | null) => void
 
   holdOrder: () => boolean
   resumeHeld: (id: string) => void
@@ -77,6 +86,18 @@ interface ZPosState {
   openShift: (cashierName: string, openingCash: number) => Promise<boolean>
   closeShift: (countedCash: number) => Promise<Shift | null>
   resetDemo: () => Promise<boolean>
+
+  saveSupplier: (data: Partial<Supplier> & { name: string }) => Promise<boolean>
+  deleteSupplier: (id: string) => Promise<boolean>
+  createPurchase: (args: { supplierId: string; items: Array<{ productId: string; qty: number; cost: number }>; note: string }) => Promise<boolean>
+  saveCustomer: (data: Partial<Customer> & { name: string }) => Promise<boolean>
+  deleteCustomer: (id: string) => Promise<boolean>
+  saveEmployee: (data: Partial<Employee> & { name: string; role: string }) => Promise<boolean>
+  deleteEmployee: (id: string) => Promise<boolean>
+  savePromo: (data: Partial<Promo> & { code: string; name: string }) => Promise<boolean>
+  deletePromo: (id: string) => Promise<boolean>
+  saveOutlet: (data: Partial<Outlet> & { name: string }) => Promise<boolean>
+  deleteOutlet: (id: string) => Promise<boolean>
 }
 
 async function jfetch<T>(url: string, init?: RequestInit): Promise<T> {
@@ -108,6 +129,9 @@ export const useZPos = create<ZPosState>()(
       devices: [],
       settings: null,
       serverInfo: null,
+      customers: [],
+      promos: [],
+      employees: [],
 
       cart: [],
       orderType: 'takeaway',
@@ -116,6 +140,8 @@ export const useZPos = create<ZPosState>()(
       heldOrders: [],
       lastSale: null,
       cashier: 'Sari',
+      selectedCustomerId: null,
+      selectedPromoId: null,
 
       setView: (v) => set({ view: v }),
       setCashier: (c) => set({ cashier: c }),
@@ -130,6 +156,9 @@ export const useZPos = create<ZPosState>()(
             currentShift: data.currentShift,
             devices: data.devices,
             settings: data.settings,
+            customers: data.customers ?? [],
+            promos: data.promos ?? [],
+            employees: data.employees ?? [],
             serverInfo: data.serverInfo,
             booted: true,
           })
@@ -190,11 +219,13 @@ export const useZPos = create<ZPosState>()(
       removeFromCart: (productId) =>
         set({ cart: get().cart.filter((c) => c.productId !== productId) }),
 
-      clearCart: () => set({ cart: [], orderDiscount: 0, orderNote: '' }),
+      clearCart: () => set({ cart: [], orderDiscount: 0, orderNote: '', selectedCustomerId: null, selectedPromoId: null }),
 
       setOrderType: (t) => set({ orderType: t }),
       setOrderNote: (n) => set({ orderNote: n }),
       setOrderDiscount: (d) => set({ orderDiscount: Math.max(0, d) }),
+      setSelectedCustomer: (id) => set({ selectedCustomerId: id }),
+      setSelectedPromo: (id) => set({ selectedPromoId: id }),
 
       holdOrder: () => {
         const { cart, heldOrders, orderType, orderNote, orderDiscount } = get()
@@ -237,7 +268,7 @@ export const useZPos = create<ZPosState>()(
         set({ heldOrders: get().heldOrders.filter((h) => h.id !== id) }),
 
       checkout: async ({ method, paidAmount }) => {
-        const { cart, currentShift, cashier, orderType, orderNote, orderDiscount, settings } = get()
+        const { cart, currentShift, cashier, orderType, orderNote, orderDiscount, settings, selectedCustomerId, selectedPromoId } = get()
         if (cart.length === 0) return null
         try {
           const totals = computeTotals(cart, orderDiscount, settings)
@@ -254,10 +285,12 @@ export const useZPos = create<ZPosState>()(
               orderType,
               note: orderNote || undefined,
               orderDiscount: totals.orderDiscount || undefined,
+              customerId: selectedCustomerId ?? null,
+              promoId: selectedPromoId ?? null,
               offset: tzOffset(),
             }),
           })
-          set({ cart: [], lastSale: sale, orderDiscount: 0, orderNote: '' })
+          set({ cart: [], lastSale: sale, orderDiscount: 0, orderNote: '', selectedCustomerId: null, selectedPromoId: null })
           await get().bootstrap()
           return sale
         } catch (e) {
@@ -359,11 +392,170 @@ export const useZPos = create<ZPosState>()(
         try {
           await jfetch<{ ok: boolean }>('/api/seed', { method: 'POST' })
           toast.success('Data demo di-reset')
-          set({ cart: [], heldOrders: [], currentShift: null })
+          set({ cart: [], heldOrders: [], currentShift: null, selectedCustomerId: null, selectedPromoId: null })
           await get().bootstrap()
           return true
         } catch (e) {
           toast.error('Gagal reset data demo', { description: e instanceof Error ? e.message : undefined })
+          return false
+        }
+      },
+
+      /* ===== Suite: supplier & pembelian ===== */
+      saveSupplier: async (data) => {
+        try {
+          if (data.id) {
+            await jfetch<Supplier>(`/api/suppliers`, { method: 'PATCH', body: JSON.stringify(data) })
+            toast.success('Supplier diperbarui')
+          } else {
+            await jfetch<Supplier>('/api/suppliers', { method: 'POST', body: JSON.stringify(data) })
+            toast.success('Supplier ditambahkan')
+          }
+          return true
+        } catch (e) {
+          toast.error('Gagal menyimpan supplier', { description: e instanceof Error ? e.message : undefined })
+          return false
+        }
+      },
+
+      deleteSupplier: async (id) => {
+        try {
+          await jfetch(`/api/suppliers?id=${id}`, { method: 'DELETE' })
+          toast.success('Supplier dihapus')
+          return true
+        } catch (e) {
+          toast.error('Gagal menghapus supplier', { description: e instanceof Error ? e.message : undefined })
+          return false
+        }
+      },
+
+      createPurchase: async ({ supplierId, items, note }) => {
+        try {
+          await jfetch<Purchase>('/api/purchases', {
+            method: 'POST', body: JSON.stringify({ supplierId, items, note }),
+          })
+          toast.success('Pembelian diterima', { description: 'Stok produk otomatis bertambah.' })
+          await get().bootstrap()
+          return true
+        } catch (e) {
+          toast.error('Gagal mencatat pembelian', { description: e instanceof Error ? e.message : undefined })
+          return false
+        }
+      },
+
+      /* ===== Suite: pelanggan, karyawan, promo, outlet ===== */
+      saveCustomer: async (data) => {
+        try {
+          if (data.id) {
+            await jfetch<Customer>('/api/customers', { method: 'PATCH', body: JSON.stringify(data) })
+            toast.success('Pelanggan diperbarui')
+          } else {
+            await jfetch<Customer>('/api/customers', { method: 'POST', body: JSON.stringify(data) })
+            toast.success('Member baru terdaftar')
+          }
+          await get().bootstrap()
+          return true
+        } catch (e) {
+          toast.error('Gagal menyimpan pelanggan', { description: e instanceof Error ? e.message : undefined })
+          return false
+        }
+      },
+
+      deleteCustomer: async (id) => {
+        try {
+          await jfetch(`/api/customers?id=${id}`, { method: 'DELETE' })
+          toast.success('Pelanggan dihapus')
+          await get().bootstrap()
+          return true
+        } catch (e) {
+          toast.error('Gagal menghapus pelanggan', { description: e instanceof Error ? e.message : undefined })
+          return false
+        }
+      },
+
+      saveEmployee: async (data) => {
+        try {
+          if (data.id) {
+            await jfetch<Employee>('/api/employees', { method: 'PATCH', body: JSON.stringify(data) })
+            toast.success('Karyawan diperbarui')
+          } else {
+            await jfetch<Employee>('/api/employees', { method: 'POST', body: JSON.stringify(data) })
+            toast.success('Karyawan ditambahkan')
+          }
+          await get().bootstrap()
+          return true
+        } catch (e) {
+          toast.error('Gagal menyimpan karyawan', { description: e instanceof Error ? e.message : undefined })
+          return false
+        }
+      },
+
+      deleteEmployee: async (id) => {
+        try {
+          await jfetch(`/api/employees?id=${id}`, { method: 'DELETE' })
+          toast.success('Karyawan dihapus')
+          await get().bootstrap()
+          return true
+        } catch (e) {
+          toast.error('Gagal menghapus karyawan', { description: e instanceof Error ? e.message : undefined })
+          return false
+        }
+      },
+
+      savePromo: async (data) => {
+        try {
+          if (data.id) {
+            await jfetch<Promo>('/api/promos', { method: 'PATCH', body: JSON.stringify(data) })
+            toast.success('Promo diperbarui')
+          } else {
+            await jfetch<Promo>('/api/promos', { method: 'POST', body: JSON.stringify(data) })
+            toast.success('Promo dibuat')
+          }
+          await get().bootstrap()
+          return true
+        } catch (e) {
+          toast.error('Gagal menyimpan promo', { description: e instanceof Error ? e.message : undefined })
+          return false
+        }
+      },
+
+      deletePromo: async (id) => {
+        try {
+          await jfetch(`/api/promos?id=${id}`, { method: 'DELETE' })
+          toast.success('Promo dihapus')
+          await get().bootstrap()
+          return true
+        } catch (e) {
+          toast.error('Gagal menghapus promo', { description: e instanceof Error ? e.message : undefined })
+          return false
+        }
+      },
+
+      saveOutlet: async (data) => {
+        try {
+          if (data.id) {
+            await jfetch<Outlet>('/api/outlets', { method: 'PATCH', body: JSON.stringify(data) })
+            toast.success('Outlet diperbarui')
+          } else {
+            await jfetch<Outlet>('/api/outlets', { method: 'POST', body: JSON.stringify(data) })
+            toast.success('Outlet ditambahkan')
+          }
+          await get().bootstrap()
+          return true
+        } catch (e) {
+          toast.error('Gagal menyimpan outlet', { description: e instanceof Error ? e.message : undefined })
+          return false
+        }
+      },
+
+      deleteOutlet: async (id) => {
+        try {
+          await jfetch(`/api/outlets?id=${id}`, { method: 'DELETE' })
+          toast.success('Outlet dihapus')
+          await get().bootstrap()
+          return true
+        } catch (e) {
+          toast.error('Gagal menghapus outlet', { description: e instanceof Error ? e.message : undefined })
           return false
         }
       },

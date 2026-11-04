@@ -19,6 +19,8 @@ interface SaleBody {
   note?: string
   orderDiscount?: number
   offset?: number
+  customerId?: string | null
+  promoId?: string | null
 }
 
 const VALID_METHODS = ['cash', 'qris', 'transfer', 'card']
@@ -94,10 +96,40 @@ export async function POST(req: Request) {
 
     const subtotal = lines.reduce((s, l) => s + l.price * l.qty, 0)
     const itemDiscount = lines.reduce((s, l) => s + l.discount, 0)
-
-    // Diskon level transaksi (maks. sisa setelah diskon item)
     const afterItems = subtotal - itemDiscount
-    const orderDiscount = Math.max(0, Math.min(Number(body.orderDiscount) || 0, afterItems))
+
+    // Pelanggan member (opsional)
+    let customerId: string | null = null
+    let customerName: string | null = null
+    if (body.customerId) {
+      const cust = await db.customer.findUnique({ where: { id: body.customerId } })
+      if (!cust || !cust.isActive)
+        return NextResponse.json({ error: 'Pelanggan tidak valid / tidak aktif' }, { status: 400 })
+      customerId = cust.id
+      customerName = cust.name
+    }
+
+    // Promo (opsional) — server = sumber kebenaran perhitungan diskon promo
+    let orderDiscount = Math.max(0, Math.min(Number(body.orderDiscount) || 0, afterItems))
+    let promoId: string | null = null
+    let promoName: string | null = null
+    if (body.promoId) {
+      const promo = await db.promo.findUnique({ where: { id: body.promoId } })
+      const now = new Date()
+      const valid =
+        promo && promo.isActive &&
+        now >= promo.startsAt &&
+        (!promo.endsAt || now <= promo.endsAt) &&
+        afterItems >= promo.minPurchase
+      if (!valid)
+        return NextResponse.json({ error: 'Promo tidak berlaku untuk transaksi ini' }, { status: 400 })
+      promoId = promo.id
+      promoName = promo.name
+      const raw = promo.type === 'percent'
+        ? Math.round(afterItems * (promo.value / 100))
+        : promo.value
+      orderDiscount = Math.max(0, Math.min(raw, afterItems))
+    }
 
     // Pajak dari pengaturan toko (PPN/PB1)
     const setting = await db.setting.findUnique({ where: { id: 'main' } })
@@ -143,6 +175,7 @@ export async function POST(req: Request) {
         data: {
           invoiceNo, status: 'paid', subtotal, discount: itemDiscount, orderDiscount, tax, total,
           paidAmount, changeAmount, method, orderType, note, cashierName, shiftId,
+          customerId, customerName, promoId, promoName,
           items: {
             create: lines.map((l) => ({
               productId: l.productId, name: l.name, qty: l.qty,
@@ -165,6 +198,29 @@ export async function POST(req: Request) {
           },
         })
       }
+
+      // Promo terpakai
+      if (promoId) {
+        await tx.promo.update({ where: { id: promoId }, data: { usageCount: { increment: 1 } } })
+      }
+
+      // Update agregat member: total belanja, kunjungan, poin (1 poin / Rp10.000)
+      if (customerId) {
+        const cust = await tx.customer.findUnique({ where: { id: customerId } })
+        if (cust) {
+          const spend = cust.totalSpend + total
+          await tx.customer.update({
+            where: { id: customerId },
+            data: {
+              totalSpend: spend,
+              visitCount: { increment: 1 },
+              points: { increment: Math.floor(total / 10000) },
+              tier: spend >= 1_000_000 ? 'gold' : spend >= 400_000 ? 'silver' : 'regular',
+            },
+          })
+        }
+      }
+
       return created
     })
 

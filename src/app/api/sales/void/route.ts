@@ -32,6 +32,24 @@ export async function POST(req: Request) {
           data: { productId: it.productId, type: 'return', qty: it.qty, refId: sale.id, note: `Void ${sale.invoiceNo}` },
         })
       }
+
+      // Rollback agregat member bila transaksi terkait pelanggan
+      if (sale.customerId) {
+        const cust = await tx.customer.findUnique({ where: { id: sale.customerId } })
+        if (cust) {
+          const spend = Math.max(0, cust.totalSpend - sale.total)
+          await tx.customer.update({
+            where: { id: cust.id },
+            data: {
+              totalSpend: spend,
+              visitCount: { decrement: 1 },
+              points: { decrement: Math.floor(sale.total / 10000) },
+              tier: spend >= 1_000_000 ? 'gold' : spend >= 400_000 ? 'silver' : 'regular',
+            },
+          })
+        }
+      }
+
       return tx.sale.update({
         where: { id: sale.id },
         data: { status: 'void', voidReason: reason, voidedAt: new Date() },

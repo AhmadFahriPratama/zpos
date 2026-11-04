@@ -64,6 +64,73 @@ export function RevenueBars({
   )
 }
 
+/* ============ Grafik batang laba ============ */
+export function ProfitBars({
+  data, height = 190,
+}: {
+  data: Stats['profitSeries']
+  height?: number
+}) {
+  const max = Math.max(1, ...data.map((d) => Math.max(d.profit, d.revenue)))
+  return (
+    <div>
+      <div className="relative flex items-end gap-1.5 sm:gap-2" style={{ height }}>
+        {[25, 50, 75].map((p) => (
+          <div
+            key={p}
+            className="pointer-events-none absolute inset-x-0 border-t border-dashed border-zinc-100"
+            style={{ bottom: `${p}%` }}
+            aria-hidden="true"
+          />
+        ))}
+        {data.map((d, i) => {
+          const hp = d.profit > 0 ? Math.max(4, Math.round((d.profit / max) * 100)) : 2
+          const hr = d.revenue > 0 ? Math.max(6, Math.round((d.revenue / max) * 100)) : 2
+          const isLast = i === data.length - 1
+          return (
+            <div key={d.date} className="group relative flex h-full min-w-0 flex-1 flex-col items-center justify-end">
+              <div className="relative flex h-full w-full max-w-9 items-end justify-center">
+                {/* omzet (belakang, abu) */}
+                <div
+                  title={`${d.label}, ${d.dayNum} — Omzet ${rupiah(d.revenue)} · Laba ${rupiah(d.profit)}`}
+                  style={{ height: `${hr}%` }}
+                  className="absolute bottom-0 w-full rounded-t-md bg-zinc-100 transition-colors group-hover:bg-zinc-200"
+                />
+                {/* laba (depan, emerald) */}
+                <div
+                  style={{ height: `${hp}%` }}
+                  className={cn(
+                    'relative z-10 w-1/2 rounded-t-md transition-colors',
+                    isLast ? 'bg-emerald-500' : 'bg-emerald-300 group-hover:bg-emerald-500'
+                  )}
+                />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      <div className="mt-2 flex gap-1.5 sm:gap-2">
+        {data.map((d, i) => (
+          <div key={d.date} className="min-w-0 flex-1 text-center">
+            <p className={cn('text-[10px] font-semibold leading-none', i === data.length - 1 ? 'text-emerald-700' : 'text-zinc-400')}>
+              {d.dayNum}
+            </p>
+            <p className="mt-0.5 text-[9px] leading-none text-zinc-300">{d.label}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex items-center justify-center gap-4 text-[10px] font-semibold text-zinc-400">
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-sm bg-zinc-200" aria-hidden="true" /> Omzet
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-sm bg-emerald-400" aria-hidden="true" /> Laba Kotor
+        </span>
+      </div>
+    </div>
+  )
+}
+
 /* ============ Donut metode pembayaran ============ */
 const METHOD_COLORS: Record<string, string> = {
   cash: '#18181b',

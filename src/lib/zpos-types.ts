@@ -67,6 +67,10 @@ export interface Sale {
   shiftId: string | null
   voidReason: string | null
   voidedAt: string | null
+  customerId: string | null
+  customerName: string | null
+  promoId: string | null
+  promoName: string | null
   createdAt: string
   items: SaleItem[]
 }
@@ -131,11 +135,101 @@ export interface Stats {
   todayCount: number
   todayItems: number
   avgTicket: number
+  todayProfit: number
+  rangeProfit: number
   series: Array<{ date: string; label: string; dayNum: string; revenue: number; count: number }>
+  profitSeries: Array<{ date: string; label: string; dayNum: string; profit: number; revenue: number }>
   topProducts: Array<{ productId: string; name: string; qty: number; revenue: number }>
   methodBreakdown: Array<{ method: string; count: number; total: number }>
   lowStock: Array<{ id: string; name: string; stock: number; unit: string; minStock: number }>
   recent: Sale[]
+  categoryBreakdown: Array<{ name: string; qty: number; revenue: number; profit: number }>
+  cashierBreakdown: Array<{ name: string; count: number; total: number }>
+  topCustomers: Array<{ id: string; name: string; count: number; total: number }>
+}
+
+/* ===== Modul bisnis suite ===== */
+
+export interface Supplier {
+  id: string
+  name: string
+  contact: string
+  phone: string
+  email: string
+  address: string
+  isActive: boolean
+  createdAt: string
+  _count?: { purchases: number }
+}
+
+export interface PurchaseItem {
+  id: string
+  productId: string | null
+  name: string
+  qty: number
+  cost: number
+  subtotal: number
+}
+
+export interface Purchase {
+  id: string
+  poNo: string
+  status: string
+  total: number
+  note: string | null
+  receivedAt: string | null
+  createdAt: string
+  supplierId: string
+  supplier: { id: string; name: string }
+  items: PurchaseItem[]
+}
+
+export interface Customer {
+  id: string
+  code: string
+  name: string
+  phone: string
+  email: string
+  tier: string
+  points: number
+  totalSpend: number
+  visitCount: number
+  note: string | null
+  isActive: boolean
+  createdAt: string
+}
+
+export interface Employee {
+  id: string
+  name: string
+  role: string
+  phone: string
+  isActive: boolean
+  joinedAt: string
+}
+
+export interface Promo {
+  id: string
+  code: string
+  name: string
+  type: 'percent' | 'fixed'
+  value: number
+  minPurchase: number
+  startsAt: string
+  endsAt: string | null
+  isActive: boolean
+  usageCount: number
+  createdAt: string
+}
+
+export interface Outlet {
+  id: string
+  name: string
+  address: string
+  phone: string
+  isMain: boolean
+  isActive: boolean
+  createdAt: string
 }
 
 export interface Bootstrap {
@@ -144,6 +238,10 @@ export interface Bootstrap {
   currentShift: Shift | null
   devices: Device[]
   settings: Settings | null
+  customers: Customer[]
+  promos: Promo[]
+  employees: Employee[]
+  outlets: Outlet[]
   serverInfo: {
     name: string
     address: string

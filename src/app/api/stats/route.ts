@@ -106,11 +106,79 @@ export async function GET(req: Request) {
       take: 6,
     })
 
+    /* ===== Analitik suite ===== */
+
+    // Laba kotor per periode (omzet - HPP, dari item)
+    const todayProfit = todaySales.reduce(
+      (a, s) => a + s.items.reduce((x, it) => x + (it.price * it.qty - it.discount - it.cost * it.qty), 0), 0
+    )
+    const rangeProfit = sales.reduce(
+      (a, s) => a + s.items.reduce((x, it) => x + (it.price * it.qty - it.discount - it.cost * it.qty), 0), 0
+    )
+    const profitSeries = days.map((d) => {
+      const ds = sales.filter((s) => s.createdAt >= d.startUtc && s.createdAt < d.endUtc)
+      return {
+        date: d.key, label: d.label, dayNum: d.dayNum,
+        profit: ds.reduce((a, s) => a + s.items.reduce((x, it) => x + (it.price * it.qty - it.discount - it.cost * it.qty), 0), 0),
+        revenue: ds.reduce((a, b) => a + b.total, 0),
+      }
+    })
+
+    // Per kategori
+    const productIds = [...new Set(sales.flatMap((s) => s.items.map((it) => it.productId).filter((x): x is string => !!x)))]
+    const catProducts = await db.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, categoryId: true, category: { select: { name: true } } },
+    })
+    const catOfProduct = new Map(catProducts.map((p) => [p.id, p.category?.name ?? 'Tanpa Kategori']))
+    const perCategory = new Map<string, { qty: number; revenue: number; profit: number }>()
+    for (const s of sales) {
+      for (const it of s.items) {
+        const cat = it.productId ? catOfProduct.get(it.productId) ?? 'Tanpa Kategori' : 'Tanpa Kategori'
+        const cur = perCategory.get(cat) ?? { qty: 0, revenue: 0, profit: 0 }
+        cur.qty += it.qty
+        cur.revenue += it.subtotal
+        cur.profit += it.price * it.qty - it.discount - it.cost * it.qty
+        perCategory.set(cat, cur)
+      }
+    }
+    const categoryBreakdown = [...perCategory.entries()]
+      .map(([name, v]) => ({ name, ...v }))
+      .sort((a, b) => b.revenue - a.revenue)
+
+    // Per kasir
+    const perCashier = new Map<string, { count: number; total: number }>()
+    for (const s of sales) {
+      const cur = perCashier.get(s.cashierName) ?? { count: 0, total: 0 }
+      cur.count += 1
+      cur.total += s.total
+      perCashier.set(s.cashierName, cur)
+    }
+    const cashierBreakdown = [...perCashier.entries()]
+      .map(([name, v]) => ({ name, ...v }))
+      .sort((a, b) => b.total - a.total)
+
+    // Member teratas
+    const perCustomer = new Map<string, { name: string; count: number; total: number }>()
+    for (const s of sales) {
+      if (!s.customerId) continue
+      const cur = perCustomer.get(s.customerId) ?? { name: s.customerName ?? 'Member', count: 0, total: 0 }
+      cur.count += 1
+      cur.total += s.total
+      perCustomer.set(s.customerId, cur)
+    }
+    const topCustomers = [...perCustomer.entries()]
+      .map(([id, v]) => ({ id, ...v }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 5)
+
     return NextResponse.json({
       range: nDays,
       todayRevenue, yesterdayRevenue, todayCount, todayItems,
       avgTicket: todayCount > 0 ? Math.round(todayRevenue / todayCount) : 0,
-      series, topProducts, methodBreakdown, lowStock, recent,
+      todayProfit, rangeProfit,
+      series, profitSeries, topProducts, methodBreakdown, lowStock, recent,
+      categoryBreakdown, cashierBreakdown, topCustomers,
     })
   } catch (e) {
     return NextResponse.json(

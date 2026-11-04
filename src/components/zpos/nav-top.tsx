@@ -4,28 +4,31 @@ import { useEffect, useState } from 'react'
 import { useZPos, type View } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import {
-  Activity, BarChart3, Boxes, ChevronDown, Clock, LayoutDashboard, Package,
-  ReceiptText, Settings, ShoppingCart, UserRound,
+  Activity, BarChart3, Boxes, ChevronDown, ClipboardList, Clock, LayoutDashboard, Package,
+  ReceiptText, Settings, ShoppingCart, Store, Tags, UsersRound, UserCog, UserRound,
 } from 'lucide-react'
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuLabel, DropdownMenuTrigger,
+  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { StatusDot } from './ui-bits'
 
-const NAV: Array<{ id: View; label: string; icon: typeof ShoppingCart }> = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'kasir', label: 'Kasir', icon: ShoppingCart },
-  { id: 'produk', label: 'Produk', icon: Package },
-  { id: 'stok', label: 'Stok', icon: Boxes },
-  { id: 'transaksi', label: 'Transaksi', icon: ReceiptText },
-  { id: 'shift', label: 'Shift', icon: Clock },
-  { id: 'laporan', label: 'Laporan', icon: BarChart3 },
+const NAV: Array<{ id: View; label: string; icon: typeof ShoppingCart; labelAt?: string }> = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, labelAt: 'xl' },
+  { id: 'kasir', label: 'Kasir', icon: ShoppingCart, labelAt: 'md' },
+  { id: 'produk', label: 'Produk', icon: Package, labelAt: 'md' },
+  { id: 'stok', label: 'Stok', icon: Boxes, labelAt: 'md' },
+  { id: 'pembelian', label: 'Pembelian', icon: ClipboardList },
+  { id: 'pelanggan', label: 'Pelanggan', icon: UsersRound },
+  { id: 'karyawan', label: 'Karyawan', icon: UserCog },
+  { id: 'promo', label: 'Promo', icon: Tags },
+  { id: 'transaksi', label: 'Transaksi', icon: ReceiptText, labelAt: 'md' },
+  { id: 'shift', label: 'Shift', icon: Clock, labelAt: 'md' },
+  { id: 'laporan', label: 'Laporan', icon: BarChart3, labelAt: 'md' },
+  { id: 'outlet', label: 'Outlet', icon: Store },
   { id: 'monitoring', label: 'Server', icon: Activity },
   { id: 'pengaturan', label: 'Setelan', icon: Settings },
 ]
-
-const CASHIERS = ['Sari', 'Dewi', 'Rio']
 
 function LiveClock() {
   const [now, setNow] = useState<Date | null>(null)
@@ -56,6 +59,13 @@ export function NavTop() {
   const setCashier = useZPos((s) => s.setCashier)
   const currentShift = useZPos((s) => s.currentShift)
   const storeName = useZPos((s) => s.settings?.storeName)
+  const employees = useZPos((s) => s.employees)
+
+  // Kandidat login: karyawan aktif role kasir/manager/owner
+  const staff = employees.filter((e) => ['owner', 'manager', 'kasir'].includes(e.role))
+  const options = staff.length > 0
+    ? staff.map((e) => ({ name: e.name.split(' ')[0], role: e.role }))
+    : ['Sari', 'Dewi', 'Rio'].map((n) => ({ name: n, role: 'kasir' }))
 
   return (
     <header className="z-40 shrink-0 border-b border-zinc-200 bg-white">
@@ -80,23 +90,33 @@ export function NavTop() {
         <span className="hidden h-6 w-px bg-zinc-200 md:block" aria-hidden="true" />
 
         {/* Navigasi utama — di atas */}
-        <nav aria-label="Navigasi utama" className="zpos-scroll flex flex-1 items-center gap-1 overflow-x-auto">
+        <nav aria-label="Navigasi utama" className="zpos-scroll flex flex-1 items-center gap-0.5 overflow-x-auto">
           {NAV.map((item) => {
             const active = view === item.id
             return (
               <button
                 key={item.id}
                 onClick={() => setView(item.id)}
+                title={item.label}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'relative flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors sm:px-3',
+                  'relative flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-2 text-[12.5px] font-medium transition-colors sm:px-2.5',
                   active
                     ? 'bg-zinc-900 text-white shadow-sm'
                     : 'text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900'
                 )}
               >
                 <item.icon className="h-4 w-4" aria-hidden="true" />
-                <span className={cn('hidden md:inline', item.id === 'dashboard' && 'hidden xl:inline')}>{item.label}</span>
+                <span
+                  className={cn(
+                    'hidden',
+                    item.labelAt === 'md' && 'md:inline xl:inline',
+                    item.labelAt === 'xl' && 'xl:inline',
+                    !item.labelAt && 'xl:inline',
+                  )}
+                >
+                  {item.label}
+                </span>
               </button>
             )
           })}
@@ -129,19 +149,30 @@ export function NavTop() {
                 <ChevronDown className="hidden h-3 w-3 text-zinc-400 lg:inline" aria-hidden="true" />
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuContent align="end" className="w-52">
               <DropdownMenuLabel className="flex items-center gap-2 text-xs text-zinc-500">
-                <UserRound className="h-3.5 w-3.5" aria-hidden="true" /> Login kasir (demo)
+                <UserRound className="h-3.5 w-3.5" aria-hidden="true" /> Masuk sebagai
               </DropdownMenuLabel>
-              {CASHIERS.map((c) => (
+              {options.map((o) => (
                 <DropdownMenuItem
-                  key={c}
-                  onClick={() => setCashier(c)}
-                  className={cn('text-sm', cashier === c && 'bg-zinc-100 font-semibold')}
+                  key={o.name}
+                  onClick={() => setCashier(o.name)}
+                  className={cn('flex items-center justify-between text-sm', cashier === o.name && 'bg-zinc-100 font-semibold')}
                 >
-                  {c}
+                  <span>{o.name}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-zinc-400">
+                    {o.role === 'owner' ? 'Pemilik' : o.role === 'manager' ? 'Manajer' : 'Kasir'}
+                  </span>
                 </DropdownMenuItem>
               ))}
+              {staff.length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={() => setView('karyawan')} className="text-xs text-zinc-500">
+                    <UserCog className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" /> Kelola karyawan…
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
