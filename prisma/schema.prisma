@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,20 +7,97 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+model Category {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  products  Product[]
 }
 
-model Post {
+model Product {
+  id         String      @id @default(cuid())
+  sku        String      @unique
+  barcode    String?     @unique
+  name       String
+  unit       String      @default("pcs")
+  price      Float       @default(0)
+  cost       Float       @default(0)
+  stock      Int         @default(0)
+  minStock   Int         @default(5)
+  isActive   Boolean     @default(true)
+  categoryId String?
+  category   Category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  saleItems  SaleItem[]
+  stockMoves StockMove[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model Shift {
+  id          String    @id @default(cuid())
+  cashierName String
+  openingCash Float     @default(0)
+  closingCash Float?
+  expectedCash Float?
+  diff        Float?
+  status      String    @default("open")
+  openedAt    DateTime  @default(now())
+  closedAt    DateTime?
+  sales       Sale[]
+}
+
+model Sale {
+  id           String     @id @default(cuid())
+  invoiceNo    String     @unique
+  status       String     @default("paid")
+  subtotal     Float      @default(0)
+  discount     Float      @default(0)
+  total        Float      @default(0)
+  paidAmount   Float      @default(0)
+  changeAmount Float      @default(0)
+  method       String     @default("cash")
+  cashierName  String     @default("Kasir")
+  shiftId      String?
+  shift        Shift?     @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  items        SaleItem[]
+  createdAt    DateTime   @default(now())
+}
+
+model SaleItem {
+  id        String  @id @default(cuid())
+  saleId    String
+  sale      Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  name      String
+  qty       Int     @default(1)
+  price     Float   @default(0)
+  cost      Float   @default(0)
+  discount  Float   @default(0)
+  subtotal  Float   @default(0)
+}
+
+model StockMove {
   id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  type      String
+  qty       Int
+  note      String?
+  refId     String?
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+}
+
+model Device {
+  id        String   @id @default(cuid())
+  name      String
+  kind      String   @default("client")
+  platform  String
+  version   String   @default("1.0.0")
+  status    String   @default("online")
+  isBlocked Boolean  @default(false)
+  lastSeen  DateTime @default(now())
+  createdAt DateTime @default(now())
 }

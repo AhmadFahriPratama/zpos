@@ -14,17 +14,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "zPos — Master Plan Sistem Kasir Multi-Platform",
+  title: "zPos — Aplikasi Kasir Multi-Platform",
   description:
-    "Perencanaan lengkap zPos: aplikasi POS offline-first multi-platform (Windows, macOS, Android, iOS) dengan server utama di PC/homeserver, tersambung via WiFi/LAN, dan dashboard monitoring terpusat.",
-  keywords: ["zPos", "POS", "aplikasi kasir", "kasir offline", "LAN", "POS multi-platform", "homeserver"],
-  openGraph: {
-    title: "zPos — Master Plan Sistem Kasir Multi-Platform",
-    description:
-      "Aplikasi POS generasi baru: server lokal di PC/homeserver, multi-platform, offline-first, tanpa biaya cloud.",
-    siteName: "zPos Master Plan",
-    type: "website",
-  },
+    "Prototipe MVP zPos: aplikasi kasir (POS) offline-first dengan server lokal. Kasir, produk, stok, laporan, shift, dan monitoring perangkat dalam satu aplikasi desktop.",
+  keywords: ["zPos", "POS", "aplikasi kasir", "kasir", "point of sale"],
 };
 
 export default function RootLayout({
